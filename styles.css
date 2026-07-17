@@ -307,6 +307,94 @@ button {
   font-size: 15px;
 }
 
+.intensity-chart,
+.analysis-chart {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 320px) minmax(0, 1fr) 90px;
+  gap: 12px;
+  align-items: center;
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.rank-row.clickable {
+  cursor: pointer;
+}
+
+.rank-row.clickable:hover {
+  background: #eef4ff;
+  border-color: #b9cdf2;
+}
+
+.rank-label {
+  min-width: 0;
+}
+
+.rank-label strong,
+.rank-label span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-label strong {
+  font-size: 13px;
+}
+
+.rank-label span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rank-track {
+  height: 12px;
+  overflow: hidden;
+  background: #e1e7f0;
+  border-radius: 999px;
+}
+
+.rank-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #8bb6ff, var(--accent));
+}
+
+.rank-fill.negative {
+  background: linear-gradient(90deg, #f4b3aa, var(--fire));
+}
+
+.rank-fill.green {
+  background: linear-gradient(90deg, #77d9a3, var(--assembly));
+}
+
+.rank-value {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.analysis-note {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  color: var(--muted);
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 .profile-chart.compact {
   gap: 8px;
 }
@@ -528,6 +616,7 @@ td:last-child {
   .split,
   .match-workspace,
   .profile-row,
+  .rank-row,
   .detail-strip,
   .download-grid {
     grid-template-columns: 1fr;

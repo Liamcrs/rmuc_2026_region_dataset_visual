@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RMUC 2026 分区赛数据可视化</title>
-    <link rel="stylesheet" href="./styles.css?v=interactive-bars-20260718" />
+    <link rel="stylesheet" href="./styles.css?v=analysis-modules-20260718" />
   </head>
   <body>
     <header class="app-header">
@@ -15,6 +15,7 @@
       <nav class="nav-tabs" aria-label="视图切换">
         <button class="tab is-active" data-view="overview">总览</button>
         <button class="tab" data-view="teams">队伍画像</button>
+        <button class="tab" data-view="analysis">专题分析</button>
         <button class="tab" data-view="matches">对局地图</button>
         <button class="tab" data-view="opening">开局布置</button>
         <button class="tab" data-view="data">数据</button>
@@ -30,8 +31,16 @@
               <h2>对抗强度总览</h2>
               <p>红蓝双方均为全国赛或复活赛手册队伍的全量对局。</p>
             </div>
+            <div class="filters">
+              <input id="intensitySearch" type="search" placeholder="搜索学校或赛区" />
+              <select id="intensityLimit">
+                <option value="20">显示 20 场</option>
+                <option value="40">显示 40 场</option>
+                <option value="96">显示全部</option>
+              </select>
+            </div>
           </div>
-          <img class="wide-figure" src="./assets/h2h_all/all_handbook_h2h_intensity_top40.png" alt="全部比赛对抗强度总览" />
+          <div id="intensityChart" class="intensity-chart" aria-label="对抗强度总览"></div>
         </section>
         <section class="split">
           <div class="panel">
@@ -135,6 +144,33 @@
         </section>
       </section>
 
+      <section id="analysis" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>专题分析</h2>
+              <p>围绕胜负因子、阶段节奏、飞镖、科技核心、雷达易伤、地图控制、对局详情和队伍风格展开。</p>
+            </div>
+            <div class="filters">
+              <select id="analysisTopic">
+                <option value="win">胜负关键因子</option>
+                <option value="phase">分阶段节奏</option>
+                <option value="dart">飞镖收益</option>
+                <option value="assembly">科技核心/工程</option>
+                <option value="radar">雷达与易伤</option>
+                <option value="map">地图控制区域</option>
+                <option value="match">对局详情</option>
+                <option value="style">队伍风格聚类</option>
+              </select>
+              <input id="analysisSearch" type="search" placeholder="搜索队伍、兵种或区域" />
+            </div>
+          </div>
+          <div id="analysisSummary" class="detail-strip"></div>
+          <div id="analysisChart" class="analysis-chart"></div>
+          <div id="analysisTable" class="table-wrap"></div>
+        </section>
+      </section>
+
       <section id="matches" class="view">
         <section class="panel">
           <div class="panel-head">
@@ -225,6 +261,8 @@
             <a href="./data/all_qualified_team_tactical_profile_normalized_scores.csv">画像标准分 CSV</a>
             <a href="./data/all_handbook_h2h_matches_visuals.csv">96 场比赛图集 CSV</a>
             <a href="./data/opening_positions_0_30s_by_role.csv">开局兵种站位 CSV</a>
+            <a href="./data/analysis_win_factors.csv">胜负因子 CSV</a>
+            <a href="./data/analysis_team_style_clusters.csv">队伍风格 CSV</a>
             <a href="./docs/tactical_profile_explanation.md">战术收益画像说明</a>
             <a href="./docs/all_requested_matches_report_index.md">逐场报告索引</a>
           </div>
@@ -232,7 +270,7 @@
       </section>
     </main>
 
-    <script src="./data.js?v=interactive-bars-20260718"></script>
-    <script src="./app.js?v=interactive-bars-20260718"></script>
+    <script src="./data.js?v=analysis-modules-20260718"></script>
+    <script src="./app.js?v=analysis-modules-20260718"></script>
   </body>
 </html>

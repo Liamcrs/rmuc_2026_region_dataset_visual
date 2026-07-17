@@ -2,6 +2,14 @@ const state = {
   teams: [],
   matches: [],
   opening: [],
+  winFactors: [],
+  phaseDamage: [],
+  dartTeams: [],
+  assemblyTeams: [],
+  radarVulnerability: [],
+  mapZones: [],
+  matchSideMetrics: [],
+  teamStyles: [],
   selectedTeam: "",
   selectedMatch: "",
   matchImageKind: "heat",
@@ -62,6 +70,63 @@ function pct(value) {
   return `${Math.round(numberOf(value) * 100)}%`;
 }
 
+function includesTerm(row, keys, term) {
+  if (!term) return true;
+  return keys.map((key) => row[key] || "").join(" ").toLowerCase().includes(term);
+}
+
+function renderDetailCards(selector, cards) {
+  document.querySelector(selector).innerHTML = cards
+    .map(
+      ([label, value]) => `
+        <div class="detail-item">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderRankRows(selector, rows, config) {
+  const max = config.max ?? Math.max(...rows.map((row) => Math.abs(numberOf(config.value(row)))), 1);
+  document.querySelector(selector).innerHTML = rows
+    .map((row) => {
+      const value = numberOf(config.value(row));
+      const width = max ? Math.max(2, Math.min(100, (Math.abs(value) / max) * 100)) : 0;
+      const classes = ["rank-fill", config.color?.(row, value) || ""].filter(Boolean).join(" ");
+      return `
+        <div class="rank-row ${config.clickable ? "clickable" : ""}" data-id="${config.id?.(row) || ""}">
+          <span class="rank-label">
+            <strong>${config.label(row)}</strong>
+            <span>${config.sub(row)}</span>
+          </span>
+          <span class="rank-track"><span class="${classes}" style="width:${width}%"></span></span>
+          <span class="rank-value">${config.format ? config.format(value, row) : fmt.format(value)}</span>
+        </div>
+      `;
+    })
+    .join("");
+  if (config.onClick) {
+    document.querySelectorAll(`${selector} .rank-row`).forEach((row) => {
+      row.addEventListener("click", () => config.onClick(row.dataset.id));
+    });
+  }
+}
+
+function renderDataTable(selector, rows, columns) {
+  document.querySelector(selector).innerHTML = `
+    <table>
+      <thead><tr>${columns.map(([label]) => `<th>${label}</th>`).join("")}</tr></thead>
+      <tbody>
+        ${rows
+          .map((row) => `<tr>${columns.map(([, getter]) => `<td>${getter(row)}</td>`).join("")}</tr>`)
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
 function setView(id) {
   document.querySelectorAll(".tab").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === id);
@@ -93,6 +158,27 @@ function renderMetrics() {
       `
     )
     .join("");
+}
+
+function renderIntensityChart() {
+  const search = document.querySelector("#intensitySearch").value.trim().toLowerCase();
+  const limit = numberOf(document.querySelector("#intensityLimit").value);
+  const rows = state.matches
+    .filter((row) => includesTerm(row, ["赛区", "红方学校", "蓝方学校", "胜方学校"], search))
+    .sort((a, b) => numberOf(b["场总伤害"]) - numberOf(a["场总伤害"]))
+    .slice(0, limit || state.matches.length);
+  renderRankRows("#intensityChart", rows, {
+    clickable: true,
+    id: (row) => row["序号"],
+    label: (row) => `${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}`,
+    sub: (row) => `${row["赛区"]} 第${row["场次号"]}场 · 胜方 ${row["胜方学校"]}`,
+    value: (row) => row["场总伤害"],
+    onClick: (id) => {
+      state.selectedMatch = id;
+      setView("matches");
+      renderMatches();
+    },
+  });
 }
 
 function renderTeamTable() {
@@ -330,6 +416,174 @@ function renderOpeningTable() {
     .join("");
 }
 
+function renderAnalysis() {
+  const topic = document.querySelector("#analysisTopic").value;
+  const term = document.querySelector("#analysisSearch").value.trim().toLowerCase();
+
+  if (topic === "win") {
+    const rows = state.winFactors.slice().sort((a, b) => Math.abs(numberOf(b["胜负差"])) - Math.abs(numberOf(a["胜负差"])));
+    renderDetailCards("#analysisSummary", [
+      ["指标数", rows.length],
+      ["最大差异", rows[0]?.["指标"] || "-"],
+      ["方向", rows[0]?.["方向"] || "-"],
+      ["差值", fmt.format(numberOf(rows[0]?.["胜负差"]))],
+    ]);
+    renderRankRows("#analysisChart", rows, {
+      label: (row) => row["指标"],
+      sub: (row) => `胜方 ${fmt.format(numberOf(row["胜方均值"]))} / 负方 ${fmt.format(numberOf(row["负方均值"]))}`,
+      value: (row) => row["胜负差"],
+      color: (row, value) => (value < 0 ? "negative" : "green"),
+    });
+    renderDataTable("#analysisTable", rows, [
+      ["指标", (r) => r["指标"]],
+      ["胜方均值", (r) => fmt.format(numberOf(r["胜方均值"]))],
+      ["负方均值", (r) => fmt.format(numberOf(r["负方均值"]))],
+      ["胜负差", (r) => fmt.format(numberOf(r["胜负差"]))],
+    ]);
+    return;
+  }
+
+  if (topic === "phase") {
+    const rows = state.phaseDamage.slice();
+    renderDetailCards("#analysisSummary", [
+      ["阶段数", 3],
+      ["对比", "胜方 / 负方"],
+      ["指标", "场均造成伤害"],
+      ["样本", "234 局"],
+    ]);
+    renderRankRows("#analysisChart", rows, {
+      label: (row) => `${row["阶段"]} · ${row["结果"]}`,
+      sub: () => "分阶段输出节奏",
+      value: (row) => row["场均造成伤害"],
+      color: (row) => (row["结果"] === "胜方" ? "green" : ""),
+    });
+    renderDataTable("#analysisTable", rows, [
+      ["结果", (r) => r["结果"]],
+      ["阶段", (r) => r["阶段"]],
+      ["场均造成伤害", (r) => fmt.format(numberOf(r["场均造成伤害"]))],
+      ["总造成伤害", (r) => fmt.format(numberOf(r["总造成伤害"]))],
+    ]);
+    return;
+  }
+
+  const configs = {
+    dart: {
+      title: "飞镖收益",
+      rows: state.dartTeams,
+      metric: "平均飞镖伤害",
+      sub: (r) => `命中 ${fmt.format(numberOf(r["飞镖命中数"]))} · 基地 ${fmt.format(numberOf(r["命中基地"]))} · 前哨 ${fmt.format(numberOf(r["命中前哨"]))}`,
+    },
+    assembly: {
+      title: "科技核心/工程",
+      rows: state.assemblyTeams,
+      metric: "平均装配次数",
+      sub: (r) => `总装配 ${fmt.format(numberOf(r["总装配次数"]))} · L3 ${fmt.format(numberOf(r["L3"]))} · 首装 ${fmt.format(numberOf(r["平均首次装配时间"]))}s`,
+    },
+    radar: {
+      title: "雷达与易伤",
+      rows: state.radarVulnerability,
+      metric: "平均易伤机器人秒",
+      asc: true,
+      sub: (r) => `平均受伤 ${fmt.format(numberOf(r["平均受伤害"]))} · 胜局率 ${pct(r["胜局率"])}`,
+    },
+    style: {
+      title: "队伍风格聚类",
+      rows: state.teamStyles,
+      metric: "胜局率",
+      sub: (r) => `${r["风格分类"]} · 火力 ${fmt.format(numberOf(r["平均造成伤害_分"]))} / 装配 ${fmt.format(numberOf(r["平均装配次数_分"]))}`,
+      format: (v) => pct(v),
+    },
+  };
+
+  if (configs[topic]) {
+    const cfg = configs[topic];
+    const rows = cfg.rows
+      .filter((row) => includesTerm(row, ["学校名", "队伍类别", "风格分类"], term))
+      .sort((a, b) => (cfg.asc ? numberOf(a[cfg.metric]) - numberOf(b[cfg.metric]) : numberOf(b[cfg.metric]) - numberOf(a[cfg.metric])))
+      .slice(0, 20);
+    renderDetailCards("#analysisSummary", [
+      ["专题", cfg.title],
+      ["显示", `${rows.length} 支`],
+      ["排序指标", cfg.metric],
+      ["首位", rows[0]?.["学校名"] || "-"],
+    ]);
+    renderRankRows("#analysisChart", rows, {
+      label: (row) => row["学校名"],
+      sub: cfg.sub,
+      value: (row) => row[cfg.metric],
+      color: () => (topic === "radar" ? "green" : ""),
+      format: cfg.format,
+    });
+    renderDataTable("#analysisTable", rows, [
+      ["学校", (r) => r["学校名"]],
+      ["类别", (r) => r["队伍类别"]],
+      ["胜局率", (r) => pct(r["胜局率"])],
+      [cfg.metric, (r) => fmt.format(numberOf(r[cfg.metric]))],
+      ["补充", (r) => r["风格分类"] || cfg.sub(r)],
+    ]);
+    return;
+  }
+
+  if (topic === "map") {
+    const rows = state.mapZones
+      .filter((row) => includesTerm(row, ["学校名", "机器人类型", "区域"], term))
+      .sort((a, b) => numberOf(b["占比"]) - numberOf(a["占比"]))
+      .slice(0, 25);
+    renderDetailCards("#analysisSummary", [
+      ["专题", "地图控制区域"],
+      ["显示", `${rows.length} 条`],
+      ["排序指标", "区域占比"],
+      ["筛选", term || "无"],
+    ]);
+    renderRankRows("#analysisChart", rows, {
+      label: (row) => `${row["学校名"]} · ${row["机器人类型"]}`,
+      sub: (row) => row["区域"],
+      value: (row) => row["占比"],
+      format: (v) => pct(v),
+    });
+    renderDataTable("#analysisTable", rows, [
+      ["学校", (r) => r["学校名"]],
+      ["兵种", (r) => r["机器人类型"]],
+      ["区域", (r) => r["区域"]],
+      ["占比", (r) => pct(r["占比"])],
+      ["样本数", (r) => fmt.format(numberOf(r["样本数"]))],
+    ]);
+    return;
+  }
+
+  if (topic === "match") {
+    const rows = state.matches
+      .filter((row) => includesTerm(row, ["赛区", "红方学校", "蓝方学校", "胜方学校"], term))
+      .sort((a, b) => numberOf(b["场总伤害"]) - numberOf(a["场总伤害"]))
+      .slice(0, 25);
+    renderDetailCards("#analysisSummary", [
+      ["专题", "对局详情"],
+      ["显示", `${rows.length} 场`],
+      ["排序指标", "场总伤害"],
+      ["筛选", term || "无"],
+    ]);
+    renderRankRows("#analysisChart", rows, {
+      clickable: true,
+      id: (row) => row["序号"],
+      label: (row) => `${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}`,
+      sub: (row) => `${row["赛区"]} 第${row["场次号"]}场 · 胜方 ${row["胜方学校"]}`,
+      value: (row) => row["场总伤害"],
+      onClick: (id) => {
+        state.selectedMatch = id;
+        setView("matches");
+        renderMatches();
+      },
+    });
+    renderDataTable("#analysisTable", rows, [
+      ["赛区", (r) => r["赛区"]],
+      ["场次", (r) => `第${r["场次号"]}场`],
+      ["对阵", (r) => `${r["红方学校"]} ${r["红胜局"]}:${r["蓝胜局"]} ${r["蓝方学校"]}`],
+      ["胜方", (r) => r["胜方学校"]],
+      ["场总伤害", (r) => fmt.format(numberOf(r["场总伤害"]))],
+    ]);
+  }
+}
+
 function bindInteractions() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view));
@@ -359,6 +613,12 @@ function bindInteractions() {
   ["profileSearch", "profileCategory", "profileMetric", "profileLimit"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderProfileChart);
   });
+  ["intensitySearch", "intensityLimit"].forEach((id) => {
+    document.querySelector(`#${id}`).addEventListener("input", renderIntensityChart);
+  });
+  ["analysisTopic", "analysisSearch"].forEach((id) => {
+    document.querySelector(`#${id}`).addEventListener("input", renderAnalysis);
+  });
   ["matchSearch", "matchSide"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderMatches);
   });
@@ -370,22 +630,60 @@ async function init() {
     state.teams = window.RMUC_DATA.teams || [];
     state.matches = window.RMUC_DATA.matches || [];
     state.opening = window.RMUC_DATA.opening || [];
+    state.winFactors = window.RMUC_DATA.winFactors || [];
+    state.phaseDamage = window.RMUC_DATA.phaseDamage || [];
+    state.dartTeams = window.RMUC_DATA.dartTeams || [];
+    state.assemblyTeams = window.RMUC_DATA.assemblyTeams || [];
+    state.radarVulnerability = window.RMUC_DATA.radarVulnerability || [];
+    state.mapZones = window.RMUC_DATA.mapZones || [];
+    state.matchSideMetrics = window.RMUC_DATA.matchSideMetrics || [];
+    state.teamStyles = window.RMUC_DATA.teamStyles || [];
   } else {
-    const [teams, matches, opening] = await Promise.all([
+    const [
+      teams,
+      matches,
+      opening,
+      winFactors,
+      phaseDamage,
+      dartTeams,
+      assemblyTeams,
+      radarVulnerability,
+      mapZones,
+      matchSideMetrics,
+      teamStyles,
+    ] = await Promise.all([
       loadCsv("./data/all_qualified_team_tactical_profile_metrics.csv"),
       loadCsv("./data/all_handbook_h2h_matches_visuals.csv"),
       loadCsv("./data/opening_by_role_summary.csv"),
+      loadCsv("./data/analysis_win_factors.csv"),
+      loadCsv("./data/analysis_phase_damage.csv"),
+      loadCsv("./data/analysis_dart_team_summary.csv"),
+      loadCsv("./data/analysis_assembly_team_summary.csv"),
+      loadCsv("./data/analysis_radar_vulnerability.csv"),
+      loadCsv("./data/analysis_map_control_zones.csv"),
+      loadCsv("./data/analysis_match_side_metrics.csv"),
+      loadCsv("./data/analysis_team_style_clusters.csv"),
     ]);
     state.teams = teams;
     state.matches = matches;
     state.opening = opening;
+    state.winFactors = winFactors;
+    state.phaseDamage = phaseDamage;
+    state.dartTeams = dartTeams;
+    state.assemblyTeams = assemblyTeams;
+    state.radarVulnerability = radarVulnerability;
+    state.mapZones = mapZones;
+    state.matchSideMetrics = matchSideMetrics;
+    state.teamStyles = teamStyles;
   }
   renderMetrics();
+  renderIntensityChart();
   renderOverviewProfileChart();
   renderProfileChart();
   renderTeamTable();
   renderMatches();
   renderOpeningTable();
+  renderAnalysis();
 }
 
 init().catch((error) => {
