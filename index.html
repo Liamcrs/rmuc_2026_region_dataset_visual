@@ -87,6 +87,7 @@
               </select>
             </div>
           </div>
+          <div id="teamDetail" class="detail-strip"></div>
           <div class="table-wrap">
             <table id="teamTable">
               <thead>
@@ -112,7 +113,7 @@
           <div class="panel-head">
             <div>
               <h2>官方场地图对局图集</h2>
-              <p>96 场全量对局，每场包含全场热力图与代表局行动轨迹图。</p>
+              <p>96 场全量对局，选择一场后查看热力图或代表局轨迹图。</p>
             </div>
             <div class="filters">
               <input id="matchSearch" type="search" placeholder="搜索学校、赛区或场次" />
@@ -123,7 +124,23 @@
               </select>
             </div>
           </div>
-          <div id="matchGrid" class="match-grid"></div>
+          <div class="match-workspace">
+            <aside id="matchList" class="match-list" aria-label="对局列表"></aside>
+            <section class="match-detail">
+              <div class="match-detail-head">
+                <div>
+                  <h3 id="matchTitle">选择对局</h3>
+                  <p id="matchMeta"></p>
+                </div>
+                <div class="segmented" id="matchImageTabs">
+                  <button class="is-active" data-kind="heat">热力图</button>
+                  <button data-kind="path">轨迹图</button>
+                </div>
+              </div>
+              <div id="matchStats" class="detail-strip"></div>
+              <img id="matchDetailImage" class="match-detail-image" alt="对局可视化" />
+            </section>
+          </div>
         </section>
       </section>
 

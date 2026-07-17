@@ -2,6 +2,9 @@ const state = {
   teams: [],
   matches: [],
   opening: [],
+  selectedTeam: "",
+  selectedMatch: "",
+  matchImageKind: "heat",
 };
 
 const fmt = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
@@ -104,10 +107,15 @@ function renderTeamTable() {
     })
     .sort((a, b) => numberOf(b[sortKey]) - numberOf(a[sortKey]));
 
+  if (!rows.some((row) => row["学校名"] === state.selectedTeam)) {
+    state.selectedTeam = rows[0]?.["学校名"] || "";
+  }
+  renderTeamDetail(rows.find((row) => row["学校名"] === state.selectedTeam));
+
   document.querySelector("#teamTable tbody").innerHTML = rows
     .map(
       (row) => `
-        <tr>
+        <tr data-school="${row["学校名"]}" class="${row["学校名"] === state.selectedTeam ? "is-active" : ""}">
           <td>${row["学校名"]}</td>
           <td>${row["队伍名称"]}</td>
           <td>${row["手册参赛类别"]}</td>
@@ -120,6 +128,26 @@ function renderTeamTable() {
       `
     )
     .join("");
+  document.querySelectorAll("#teamTable tbody tr").forEach((row) => {
+    row.addEventListener("click", () => {
+      state.selectedTeam = row.dataset.school;
+      renderTeamTable();
+    });
+  });
+}
+
+function renderTeamDetail(row) {
+  const el = document.querySelector("#teamDetail");
+  if (!row) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = `
+    <div class="detail-item"><span>学校 / 队名</span><strong>${row["学校名"]} · ${row["队伍名称"]}</strong></div>
+    <div class="detail-item"><span>胜局率</span><strong>${pct(row["区域赛胜局率"])}</strong></div>
+    <div class="detail-item"><span>平均伤害</span><strong>${fmt.format(numberOf(row["火力收益_平均造成伤害"]))}</strong></div>
+    <div class="detail-item"><span>战术画像</span><strong>${row["战术画像"]}</strong></div>
+  `;
 }
 
 function renderMatches() {
@@ -136,22 +164,49 @@ function renderMatches() {
     return haystack.includes(search) && (!side || winnerSide === side);
   });
 
-  document.querySelector("#matchGrid").innerHTML = rows
+  if (!rows.some((row) => row["序号"] === state.selectedMatch)) {
+    state.selectedMatch = rows[0]?.["序号"] || "";
+  }
+
+  document.querySelector("#matchList").innerHTML = rows
     .map(
-      (row, index) => `
-        <article class="match-card">
-          <header>
-            <h3>${index + 1}. ${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}</h3>
-            <div class="meta">${row["赛区"]} 第${row["场次号"]}场 · 胜方 ${row["胜方学校"]} · 场总伤害 ${fmt.format(numberOf(row["场总伤害"]))}</div>
-          </header>
-          <div class="match-images">
-            <img src="./assets/h2h_all/${row["热力图"]}" alt="${row["红方学校"]} 对 ${row["蓝方学校"]} 热力图" loading="lazy" />
-            <img src="./assets/h2h_all/${row["轨迹图"]}" alt="${row["红方学校"]} 对 ${row["蓝方学校"]} 轨迹图" loading="lazy" />
-          </div>
-        </article>
+      (row) => `
+        <button class="match-list-item ${row["序号"] === state.selectedMatch ? "is-active" : ""}" data-match="${row["序号"]}">
+          <span class="match-list-title">${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}</span>
+          <span class="match-list-meta">${row["赛区"]} 第${row["场次号"]}场 · ${row["红方类别"]}/${row["蓝方类别"]} · 伤害 ${fmt.format(numberOf(row["场总伤害"]))}</span>
+        </button>
       `
     )
     .join("");
+  document.querySelectorAll(".match-list-item").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedMatch = button.dataset.match;
+      renderMatches();
+    });
+  });
+  renderMatchDetail(rows.find((row) => row["序号"] === state.selectedMatch));
+}
+
+function renderMatchDetail(row) {
+  const image = document.querySelector("#matchDetailImage");
+  if (!row) {
+    document.querySelector("#matchTitle").textContent = "没有匹配的对局";
+    document.querySelector("#matchMeta").textContent = "";
+    document.querySelector("#matchStats").innerHTML = "";
+    image.removeAttribute("src");
+    return;
+  }
+  document.querySelector("#matchTitle").textContent = `${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}`;
+  document.querySelector("#matchMeta").textContent = `${row["赛区"]} 第${row["场次号"]}场 · 胜方 ${row["胜方学校"]}`;
+  document.querySelector("#matchStats").innerHTML = `
+    <div class="detail-item"><span>场总伤害</span><strong>${fmt.format(numberOf(row["场总伤害"]))}</strong></div>
+    <div class="detail-item"><span>局数</span><strong>${row["局数"]}</strong></div>
+    <div class="detail-item"><span>代表局</span><strong>第 ${row["代表局号"]} 局</strong></div>
+    <div class="detail-item"><span>代表局伤害</span><strong>${fmt.format(numberOf(row["代表局总伤害"]))}</strong></div>
+  `;
+  const file = state.matchImageKind === "heat" ? row["热力图"] : row["轨迹图"];
+  image.src = `./assets/h2h_all/${file}`;
+  image.alt = `${row["红方学校"]} 对 ${row["蓝方学校"]}${state.matchImageKind === "heat" ? "热力图" : "轨迹图"}`;
 }
 
 function renderOpeningTable() {
@@ -192,6 +247,14 @@ function bindInteractions() {
           : `./assets/opening/opening_rulemap_${role}.png`;
     });
   });
+  document.querySelectorAll("#matchImageTabs button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll("#matchImageTabs button").forEach((item) => item.classList.remove("is-active"));
+      button.classList.add("is-active");
+      state.matchImageKind = button.dataset.kind;
+      renderMatches();
+    });
+  });
   ["teamSearch", "teamCategory", "teamSort"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderTeamTable);
   });
@@ -209,7 +272,7 @@ async function init() {
   } else {
     const [teams, matches, opening] = await Promise.all([
       loadCsv("./data/all_qualified_team_tactical_profile_metrics.csv"),
-      loadCsv("./data/all_requested_matches_visuals.csv"),
+      loadCsv("./data/all_handbook_h2h_matches_visuals.csv"),
       loadCsv("./data/opening_by_role_summary.csv"),
     ]);
     state.teams = teams;
