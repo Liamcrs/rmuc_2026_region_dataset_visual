@@ -395,6 +395,82 @@ button {
   font-size: 13px;
 }
 
+.map-control-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.map-school-list {
+  max-height: 620px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.map-school-list button {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+}
+
+.map-school-list button:hover,
+.map-school-list button.is-active {
+  background: #dfeaff;
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.field-map-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #111;
+}
+
+.field-map-panel img {
+  display: block;
+  width: 100%;
+}
+
+.field-zone-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.field-zone-cell {
+  position: absolute;
+  width: 33.333%;
+  height: 33.333%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px;
+  color: #fff;
+  background: rgba(36, 87, 166, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+}
+
+.field-zone-cell strong {
+  font-size: 14px;
+}
+
+.field-zone-cell span {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .profile-chart.compact {
   gap: 8px;
 }
@@ -615,6 +691,7 @@ td:last-child {
   .metric-grid,
   .split,
   .match-workspace,
+  .map-control-layout,
   .profile-row,
   .rank-row,
   .detail-strip,

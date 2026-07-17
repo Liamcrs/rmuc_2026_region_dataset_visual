@@ -2,14 +2,12 @@ const state = {
   teams: [],
   matches: [],
   opening: [],
-  winFactors: [],
-  phaseDamage: [],
-  dartTeams: [],
   assemblyTeams: [],
-  radarVulnerability: [],
   mapZones: [],
+  mapTopZones: [],
   matchSideMetrics: [],
   teamStyles: [],
+  selectedMapSchool: "",
   selectedTeam: "",
   selectedMatch: "",
   matchImageKind: "heat",
@@ -420,71 +418,12 @@ function renderAnalysis() {
   const topic = document.querySelector("#analysisTopic").value;
   const term = document.querySelector("#analysisSearch").value.trim().toLowerCase();
 
-  if (topic === "win") {
-    const rows = state.winFactors.slice().sort((a, b) => Math.abs(numberOf(b["胜负差"])) - Math.abs(numberOf(a["胜负差"])));
-    renderDetailCards("#analysisSummary", [
-      ["指标数", rows.length],
-      ["最大差异", rows[0]?.["指标"] || "-"],
-      ["方向", rows[0]?.["方向"] || "-"],
-      ["差值", fmt.format(numberOf(rows[0]?.["胜负差"]))],
-    ]);
-    renderRankRows("#analysisChart", rows, {
-      label: (row) => row["指标"],
-      sub: (row) => `胜方 ${fmt.format(numberOf(row["胜方均值"]))} / 负方 ${fmt.format(numberOf(row["负方均值"]))}`,
-      value: (row) => row["胜负差"],
-      color: (row, value) => (value < 0 ? "negative" : "green"),
-    });
-    renderDataTable("#analysisTable", rows, [
-      ["指标", (r) => r["指标"]],
-      ["胜方均值", (r) => fmt.format(numberOf(r["胜方均值"]))],
-      ["负方均值", (r) => fmt.format(numberOf(r["负方均值"]))],
-      ["胜负差", (r) => fmt.format(numberOf(r["胜负差"]))],
-    ]);
-    return;
-  }
-
-  if (topic === "phase") {
-    const rows = state.phaseDamage.slice();
-    renderDetailCards("#analysisSummary", [
-      ["阶段数", 3],
-      ["对比", "胜方 / 负方"],
-      ["指标", "场均造成伤害"],
-      ["样本", "234 局"],
-    ]);
-    renderRankRows("#analysisChart", rows, {
-      label: (row) => `${row["阶段"]} · ${row["结果"]}`,
-      sub: () => "分阶段输出节奏",
-      value: (row) => row["场均造成伤害"],
-      color: (row) => (row["结果"] === "胜方" ? "green" : ""),
-    });
-    renderDataTable("#analysisTable", rows, [
-      ["结果", (r) => r["结果"]],
-      ["阶段", (r) => r["阶段"]],
-      ["场均造成伤害", (r) => fmt.format(numberOf(r["场均造成伤害"]))],
-      ["总造成伤害", (r) => fmt.format(numberOf(r["总造成伤害"]))],
-    ]);
-    return;
-  }
-
   const configs = {
-    dart: {
-      title: "飞镖收益",
-      rows: state.dartTeams,
-      metric: "平均飞镖伤害",
-      sub: (r) => `命中 ${fmt.format(numberOf(r["飞镖命中数"]))} · 基地 ${fmt.format(numberOf(r["命中基地"]))} · 前哨 ${fmt.format(numberOf(r["命中前哨"]))}`,
-    },
     assembly: {
       title: "科技核心/工程",
       rows: state.assemblyTeams,
       metric: "平均装配次数",
       sub: (r) => `总装配 ${fmt.format(numberOf(r["总装配次数"]))} · L3 ${fmt.format(numberOf(r["L3"]))} · 首装 ${fmt.format(numberOf(r["平均首次装配时间"]))}s`,
-    },
-    radar: {
-      title: "雷达与易伤",
-      rows: state.radarVulnerability,
-      metric: "平均易伤机器人秒",
-      asc: true,
-      sub: (r) => `平均受伤 ${fmt.format(numberOf(r["平均受伤害"]))} · 胜局率 ${pct(r["胜局率"])}`,
     },
     style: {
       title: "队伍风格聚类",
@@ -511,7 +450,6 @@ function renderAnalysis() {
       label: (row) => row["学校名"],
       sub: cfg.sub,
       value: (row) => row[cfg.metric],
-      color: () => (topic === "radar" ? "green" : ""),
       format: cfg.format,
     });
     renderDataTable("#analysisTable", rows, [
@@ -525,29 +463,7 @@ function renderAnalysis() {
   }
 
   if (topic === "map") {
-    const rows = state.mapZones
-      .filter((row) => includesTerm(row, ["学校名", "机器人类型", "区域"], term))
-      .sort((a, b) => numberOf(b["占比"]) - numberOf(a["占比"]))
-      .slice(0, 25);
-    renderDetailCards("#analysisSummary", [
-      ["专题", "地图控制区域"],
-      ["显示", `${rows.length} 条`],
-      ["排序指标", "区域占比"],
-      ["筛选", term || "无"],
-    ]);
-    renderRankRows("#analysisChart", rows, {
-      label: (row) => `${row["学校名"]} · ${row["机器人类型"]}`,
-      sub: (row) => row["区域"],
-      value: (row) => row["占比"],
-      format: (v) => pct(v),
-    });
-    renderDataTable("#analysisTable", rows, [
-      ["学校", (r) => r["学校名"]],
-      ["兵种", (r) => r["机器人类型"]],
-      ["区域", (r) => r["区域"]],
-      ["占比", (r) => pct(r["占比"])],
-      ["样本数", (r) => fmt.format(numberOf(r["样本数"]))],
-    ]);
+    renderMapControlAnalysis(term);
     return;
   }
 
@@ -581,7 +497,65 @@ function renderAnalysis() {
       ["胜方", (r) => r["胜方学校"]],
       ["场总伤害", (r) => fmt.format(numberOf(r["场总伤害"]))],
     ]);
+    return;
   }
+
+}
+
+function renderMapControlAnalysis(term) {
+  const schools = [...new Set(state.mapTopZones.map((row) => row["学校名"]))]
+    .filter((school) => school.toLowerCase().includes(term) || state.mapTopZones.some((row) => row["学校名"] === school && includesTerm(row, ["机器人类型", "区域"], term)))
+    .sort();
+  if (!schools.includes(state.selectedMapSchool)) {
+    state.selectedMapSchool = schools[0] || "";
+  }
+  const rows = state.mapTopZones
+    .filter((row) => row["学校名"] === state.selectedMapSchool)
+    .sort((a, b) => numberOf(b["占比"]) - numberOf(a["占比"]));
+  const grouped = rows.reduce((acc, row) => {
+    acc[row["区域"]] ||= [];
+    acc[row["区域"]].push(row);
+    return acc;
+  }, {});
+  renderDetailCards("#analysisSummary", [
+    ["专题", "地图控制区域"],
+    ["学校", state.selectedMapSchool || "-"],
+    ["兵种数", rows.length],
+    ["最高区域", rows[0] ? `${rows[0]["机器人类型"]} · ${rows[0]["区域"]}` : "-"],
+  ]);
+  document.querySelector("#analysisChart").innerHTML = `
+    <div class="map-control-layout">
+      <aside class="map-school-list">
+        ${schools.map((school) => `<button class="${school === state.selectedMapSchool ? "is-active" : ""}" data-school="${school}">${school}</button>`).join("")}
+      </aside>
+      <div class="field-map-panel">
+        <img src="./assets/field/official_field_map.png" alt="官方场地图" />
+        <div class="field-zone-overlay">
+          ${Object.entries(grouped).map(([zoneName, zoneRows]) => zoneCell(zoneName, zoneRows)).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+  document.querySelectorAll(".map-school-list button").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedMapSchool = button.dataset.school;
+      renderAnalysis();
+    });
+  });
+  renderDataTable("#analysisTable", rows, [
+    ["兵种", (r) => r["机器人类型"]],
+    ["最高活动区域", (r) => r["区域"]],
+    ["占比", (r) => pct(r["占比"])],
+    ["样本数", (r) => fmt.format(numberOf(r["样本数"]))],
+  ]);
+}
+
+function zoneCell(zoneName, rows) {
+  const [xPart, yPart] = zoneName.split("-");
+  const left = { 红侧: 0, 中场: 33.333, 蓝侧: 66.666 }[xPart] ?? 0;
+  const top = { 上路: 0, 中路: 33.333, 下路: 66.666 }[yPart] ?? 0;
+  const label = rows.map((row) => `${row["机器人类型"]} ${pct(row["占比"])}`).join(" / ");
+  return `<div class="field-zone-cell" style="left:${left}%;top:${top}%"><strong>${zoneName}</strong><span>${label}</span></div>`;
 }
 
 function bindInteractions() {
@@ -630,12 +604,9 @@ async function init() {
     state.teams = window.RMUC_DATA.teams || [];
     state.matches = window.RMUC_DATA.matches || [];
     state.opening = window.RMUC_DATA.opening || [];
-    state.winFactors = window.RMUC_DATA.winFactors || [];
-    state.phaseDamage = window.RMUC_DATA.phaseDamage || [];
-    state.dartTeams = window.RMUC_DATA.dartTeams || [];
     state.assemblyTeams = window.RMUC_DATA.assemblyTeams || [];
-    state.radarVulnerability = window.RMUC_DATA.radarVulnerability || [];
     state.mapZones = window.RMUC_DATA.mapZones || [];
+    state.mapTopZones = window.RMUC_DATA.mapTopZones || [];
     state.matchSideMetrics = window.RMUC_DATA.matchSideMetrics || [];
     state.teamStyles = window.RMUC_DATA.teamStyles || [];
   } else {
@@ -643,36 +614,27 @@ async function init() {
       teams,
       matches,
       opening,
-      winFactors,
-      phaseDamage,
-      dartTeams,
       assemblyTeams,
-      radarVulnerability,
       mapZones,
+      mapTopZones,
       matchSideMetrics,
       teamStyles,
     ] = await Promise.all([
       loadCsv("./data/all_qualified_team_tactical_profile_metrics.csv"),
       loadCsv("./data/all_handbook_h2h_matches_visuals.csv"),
       loadCsv("./data/opening_by_role_summary.csv"),
-      loadCsv("./data/analysis_win_factors.csv"),
-      loadCsv("./data/analysis_phase_damage.csv"),
-      loadCsv("./data/analysis_dart_team_summary.csv"),
       loadCsv("./data/analysis_assembly_team_summary.csv"),
-      loadCsv("./data/analysis_radar_vulnerability.csv"),
       loadCsv("./data/analysis_map_control_zones.csv"),
+      loadCsv("./data/analysis_map_control_top_zones.csv"),
       loadCsv("./data/analysis_match_side_metrics.csv"),
       loadCsv("./data/analysis_team_style_clusters.csv"),
     ]);
     state.teams = teams;
     state.matches = matches;
     state.opening = opening;
-    state.winFactors = winFactors;
-    state.phaseDamage = phaseDamage;
-    state.dartTeams = dartTeams;
     state.assemblyTeams = assemblyTeams;
-    state.radarVulnerability = radarVulnerability;
     state.mapZones = mapZones;
+    state.mapTopZones = mapTopZones;
     state.matchSideMetrics = matchSideMetrics;
     state.teamStyles = teamStyles;
   }
