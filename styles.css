@@ -175,6 +175,28 @@ button {
   border-radius: 6px;
 }
 
+.shark-hero {
+  border-color: #b9cdf2;
+  box-shadow: inset 4px 0 0 var(--accent), var(--shadow);
+}
+
+.shark-field-map {
+  margin-bottom: 12px;
+}
+
+.shark-subtable {
+  margin-top: 12px;
+}
+
+.inline-action {
+  min-height: 28px;
+  padding: 0 10px;
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-size: 12px;
+}
+
 .profile-legend {
   display: flex;
   align-items: center;

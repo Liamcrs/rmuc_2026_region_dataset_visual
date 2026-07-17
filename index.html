@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RMUC 2026 分区赛数据可视化</title>
-    <link rel="stylesheet" href="./styles.css?v=prediction-module-20260718" />
+    <link rel="stylesheet" href="./styles.css?v=shark-column-20260718" />
   </head>
   <body>
     <header class="app-header">
@@ -16,6 +16,7 @@
         <button class="tab is-active" data-view="overview">总览</button>
         <button class="tab" data-view="teams">队伍画像</button>
         <button class="tab" data-view="prediction">比赛预测</button>
+        <button class="tab" data-view="shark">南工骁鹰</button>
         <button class="tab" data-view="analysis">专题分析</button>
         <button class="tab" data-view="matches">对局地图</button>
         <button class="tab" data-view="opening">开局布置</button>
@@ -195,6 +196,82 @@
         </section>
       </section>
 
+      <section id="shark" class="view">
+        <section class="panel shark-hero">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">哈尔滨工业大学（深圳）</p>
+              <h2>南工骁鹰战队专栏</h2>
+              <p>聚合队伍画像、比赛预测、风格定位、地图控制、逐场对局和逐局指标。</p>
+            </div>
+          </div>
+          <div id="sharkSummary" class="detail-strip"></div>
+        </section>
+
+        <section class="split">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>战术收益结构</h2>
+                <p>对照全体手册队伍的火力、装配、飞镖和胜局率相对位置。</p>
+              </div>
+            </div>
+            <div id="sharkProfile" class="analysis-chart"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>全国赛预测</h2>
+                <p>含 30% 上赛季国赛成绩参考权重的赛程模拟结果。</p>
+              </div>
+            </div>
+            <div id="sharkPrediction" class="analysis-chart"></div>
+          </section>
+        </section>
+
+        <section class="split">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>兵种地图控制</h2>
+                <p>排除空中后，各兵种最高活动区域映射到官方场地图。</p>
+              </div>
+            </div>
+            <div id="sharkMapControl"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>开局兵种均值</h2>
+                <p>0-30 秒开局均值，按兵种汇总南工骁鹰样本。</p>
+              </div>
+            </div>
+            <div id="sharkOpening" class="table-wrap"></div>
+          </section>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>对局复盘</h2>
+              <p>已分析对局中的南工骁鹰表现，可跳转到对局地图查看热力图和轨迹图。</p>
+            </div>
+          </div>
+          <div id="sharkMatchSummary" class="detail-strip"></div>
+          <div id="sharkMatches" class="table-wrap"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>逐局指标</h2>
+              <p>按局拆解伤害、装配、金币、基地血量和易伤暴露。</p>
+            </div>
+          </div>
+          <div id="sharkGameMetrics" class="table-wrap"></div>
+        </section>
+      </section>
+
       <section id="analysis" class="view">
         <section class="panel">
           <div class="panel-head">
@@ -306,6 +383,7 @@
             <a href="./data/all_qualified_team_tactical_profile_normalized_scores.csv">画像标准分 CSV</a>
             <a href="./data/all_handbook_h2h_matches_visuals.csv">96 场比赛图集 CSV</a>
             <a href="./data/opening_positions_0_30s_by_role.csv">开局兵种站位 CSV</a>
+            <a href="./data/analysis_team_game_metrics.csv">逐局队伍指标 CSV</a>
             <a href="./data/analysis_map_control_top_zones.csv">地图控制最高区域 CSV</a>
             <a href="./data/analysis_team_style_clusters.csv">队伍风格 CSV</a>
             <a href="./data/previous_season_national_results.csv">上赛季国赛成绩 CSV</a>
@@ -318,7 +396,7 @@
       </section>
     </main>
 
-    <script src="./data.js?v=prediction-module-20260718"></script>
-    <script src="./app.js?v=prediction-module-20260718"></script>
+    <script src="./data.js?v=shark-column-20260718"></script>
+    <script src="./app.js?v=shark-column-20260718"></script>
   </body>
 </html>

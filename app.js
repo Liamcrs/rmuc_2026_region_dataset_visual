@@ -8,6 +8,8 @@ const state = {
   matchSideMetrics: [],
   teamStyles: [],
   tournamentSimulation: [],
+  teamGameMetrics: [],
+  openingPositions: [],
   selectedMapSchool: "",
   selectedTeam: "",
   selectedMatch: "",
@@ -15,6 +17,7 @@ const state = {
 };
 
 const fmt = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
+const SHARK_SCHOOL = "哈尔滨工业大学（深圳）";
 
 function parseCsv(text) {
   const rows = [];
@@ -533,6 +536,205 @@ function renderPrediction() {
   renderPredictionStyleChart(rows);
 }
 
+function rankOf(rows, key, school, desc = true) {
+  const sorted = rows
+    .slice()
+    .sort((a, b) => (desc ? numberOf(b[key]) - numberOf(a[key]) : numberOf(a[key]) - numberOf(b[key])));
+  return sorted.findIndex((row) => row["学校名"] === school) + 1;
+}
+
+function sharkMetricRows(team, style, prediction) {
+  const maxes = profileMaxes();
+  return [
+    {
+      label: "平均造成伤害",
+      sub: `全体第 ${rankOf(state.teams, "火力收益_平均造成伤害", SHARK_SCHOOL)} / ${state.teams.length}`,
+      value: maxes.fire ? numberOf(team["火力收益_平均造成伤害"]) / maxes.fire : 0,
+      display: fmt.format(numberOf(team["火力收益_平均造成伤害"])),
+      color: "negative",
+    },
+    {
+      label: "平均装配次数",
+      sub: `全体第 ${rankOf(state.teams, "平均装配次数", SHARK_SCHOOL)} / ${state.teams.length}`,
+      value: Math.max(...state.teams.map((row) => numberOf(row["平均装配次数"]))) ? numberOf(team["平均装配次数"]) / Math.max(...state.teams.map((row) => numberOf(row["平均装配次数"]))) : 0,
+      display: fmt.format(numberOf(team["平均装配次数"])),
+      color: "green",
+    },
+    {
+      label: "平均飞镖伤害",
+      sub: `全体第 ${rankOf(state.teams, "平均飞镖伤害", SHARK_SCHOOL)} / ${state.teams.length}`,
+      value: maxes.dart ? numberOf(team["飞镖收益指数_显示用"]) / maxes.dart : 0,
+      display: fmt.format(numberOf(team["平均飞镖伤害"])),
+    },
+    {
+      label: "风格低暴露分",
+      sub: `${style?.["风格分类"] || "未分类"} · 易伤分 ${fmt.format(numberOf(style?.["平均易伤机器人秒_分"]))}`,
+      value: Math.max(0.02, 1 - numberOf(style?.["平均易伤机器人秒_分"]) / 100),
+      display: fmt.format(100 - numberOf(style?.["平均易伤机器人秒_分"])),
+      color: "green",
+    },
+    {
+      label: "模型强度分",
+      sub: `区域赛 ${fmt.format(numberOf(prediction?.["区域赛模型强度分"]))} · 上赛季 ${prediction?.["上赛季国赛成绩"] || "-"}`,
+      value: numberOf(prediction?.["模型强度分"]) / 100,
+      display: fmt.format(numberOf(prediction?.["模型强度分"])),
+    },
+  ];
+}
+
+function renderSharkProfile(team, style, prediction) {
+  renderRankRows("#sharkProfile", sharkMetricRows(team, style, prediction), {
+    label: (row) => row.label,
+    sub: (row) => row.sub,
+    value: (row) => row.value,
+    max: 1,
+    color: (row) => row.color || "",
+    format: (_, row) => row.display,
+  });
+}
+
+function renderSharkPrediction(prediction) {
+  const rows = [
+    ["全国赛十六强", prediction?.["全国赛十六强概率"], "瑞士轮 3 胜晋级 16 强"],
+    ["全国赛八强", prediction?.["全国赛八强概率"], "16 进 8 双败后留存"],
+    ["全国赛四强", prediction?.["全国赛四强概率"], "8 进 4 双败后留存"],
+    ["全国赛冠军", prediction?.["全国赛夺冠概率"], "半决赛与决赛路径"],
+  ].map(([label, value, sub]) => ({ label, value: numberOf(value), sub }));
+  renderRankRows("#sharkPrediction", rows, {
+    label: (row) => row.label,
+    sub: (row) => row.sub,
+    value: (row) => row.value,
+    max: Math.max(...rows.map((row) => row.value), 0.01),
+    format: (value) => probPct(value),
+  });
+}
+
+function renderSharkMapControl() {
+  const rows = state.mapTopZones
+    .filter((row) => row["学校名"] === SHARK_SCHOOL)
+    .sort((a, b) => numberOf(b["占比"]) - numberOf(a["占比"]));
+  const grouped = rows.reduce((acc, row) => {
+    acc[row["区域"]] ||= [];
+    acc[row["区域"]].push(row);
+    return acc;
+  }, {});
+  document.querySelector("#sharkMapControl").innerHTML = `
+    <div class="field-map-panel shark-field-map">
+      <img src="./assets/field/official_field_map.png" alt="官方场地图" />
+      <div class="field-zone-overlay">
+        ${Object.entries(grouped).map(([zoneName, zoneRows]) => zoneCell(zoneName, zoneRows)).join("")}
+      </div>
+    </div>
+    <div class="table-wrap shark-subtable"></div>
+  `;
+  renderDataTable("#sharkMapControl .shark-subtable", rows, [
+    ["兵种", (r) => r["机器人类型"]],
+    ["最高活动区域", (r) => r["区域"]],
+    ["占比", (r) => pct(r["占比"])],
+    ["样本数", (r) => fmt.format(numberOf(r["样本数"]))],
+  ]);
+}
+
+function renderSharkOpening() {
+  const byRole = state.openingPositions
+    .filter((row) => row["学校名"] === SHARK_SCHOOL)
+    .reduce((acc, row) => {
+      const role = row["机器人类型"];
+      acc[role] ||= { role, games: 0, wins: 0, samples: 0, x: 0, y: 0 };
+      acc[role].games += 1;
+      acc[role].wins += numberOf(row["是否胜方"]);
+      acc[role].samples += numberOf(row["samples"]);
+      acc[role].x += numberOf(row["x"]);
+      acc[role].y += numberOf(row["y"]);
+      return acc;
+    }, {});
+  const rows = Object.values(byRole).sort((a, b) => a.role.localeCompare(b.role, "zh-CN"));
+  renderDataTable("#sharkOpening", rows, [
+    ["兵种", (r) => r.role],
+    ["样本局", (r) => fmt.format(r.games)],
+    ["胜局率", (r) => pct(r.games ? r.wins / r.games : 0)],
+    ["平均 x", (r) => fmt.format(r.games ? r.x / r.games : 0)],
+    ["平均 y", (r) => fmt.format(r.games ? r.y / r.games : 0)],
+    ["点位样本", (r) => fmt.format(r.samples)],
+  ]);
+}
+
+function sharkMatchRows() {
+  return state.matches
+    .filter((row) => row["红方学校"] === SHARK_SCHOOL || row["蓝方学校"] === SHARK_SCHOOL)
+    .sort((a, b) => numberOf(b["场总伤害"]) - numberOf(a["场总伤害"]));
+}
+
+function renderSharkMatches() {
+  const rows = sharkMatchRows();
+  const wins = rows.filter((row) => row["胜方学校"] === SHARK_SCHOOL).length;
+  const sideRows = state.matchSideMetrics.filter((row) => row["学校名"] === SHARK_SCHOOL);
+  const totalDamage = sideRows.reduce((sum, row) => sum + numberOf(row["造成伤害"]), 0);
+  const totalTaken = sideRows.reduce((sum, row) => sum + numberOf(row["受伤害"]), 0);
+  renderDetailCards("#sharkMatchSummary", [
+    ["已分析场次", rows.length],
+    ["场胜率", pct(rows.length ? wins / rows.length : 0)],
+    ["总造成伤害", fmt.format(totalDamage)],
+    ["伤害净值", fmt.format(totalDamage - totalTaken)],
+  ]);
+  renderDataTable("#sharkMatches", rows, [
+    ["赛区", (r) => r["赛区"]],
+    ["场次", (r) => `第${r["场次号"]}场`],
+    ["对阵", (r) => `${r["红方学校"]} ${r["红胜局"]}:${r["蓝胜局"]} ${r["蓝方学校"]}`],
+    ["胜方", (r) => r["胜方学校"]],
+    ["场总伤害", (r) => fmt.format(numberOf(r["场总伤害"]))],
+    ["图集", (r) => `<button class="inline-action shark-match-link" data-match="${r["序号"]}">查看</button>`],
+  ]);
+  document.querySelectorAll(".shark-match-link").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedMatch = button.dataset.match;
+      setView("matches");
+      renderMatches();
+    });
+  });
+}
+
+function renderSharkGameMetrics() {
+  const rows = state.teamGameMetrics
+    .filter((row) => row["学校名"] === SHARK_SCHOOL)
+    .sort((a, b) => numberOf(a["场次号"]) - numberOf(b["场次号"]) || numberOf(a["局号"]) - numberOf(b["局号"]));
+  renderDataTable("#sharkGameMetrics", rows, [
+    ["赛程", (r) => r["赛程"]],
+    ["局号", (r) => r["局号"]],
+    ["阵营", (r) => r["阵营"]],
+    ["对手", (r) => r["对手学校"]],
+    ["结果", (r) => (numberOf(r["是否胜方"]) ? "胜" : "负")],
+    ["造成伤害", (r) => fmt.format(numberOf(r["造成非判罚伤害"]))],
+    ["受伤害", (r) => fmt.format(numberOf(r["受非判罚伤害"]))],
+    ["装配", (r) => fmt.format(numberOf(r["装配次数"]))],
+    ["易伤秒", (r) => fmt.format(numberOf(r["易伤机器人秒"]))],
+    ["末基地", (r) => fmt.format(numberOf(r["末基地血量"]))],
+  ]);
+}
+
+function renderSharkColumn() {
+  const team = state.teams.find((row) => row["学校名"] === SHARK_SCHOOL);
+  const style = state.teamStyles.find((row) => row["学校名"] === SHARK_SCHOOL);
+  const prediction = state.tournamentSimulation.find((row) => row["学校名"] === SHARK_SCHOOL);
+  if (!team) return;
+  renderDetailCards("#sharkSummary", [
+    ["队伍", `${team["队伍名称"]} · ${team["手册参赛类别"]}`],
+    ["区域赛胜局率", pct(team["区域赛胜局率"])],
+    ["战术画像", team["战术画像"]],
+    ["风格分类", style?.["风格分类"] || "-"],
+    ["上赛季国赛", prediction?.["上赛季国赛成绩"] || "-"],
+    ["十六强概率", probPct(prediction?.["全国赛十六强概率"])],
+    ["八强概率", probPct(prediction?.["全国赛八强概率"])],
+    ["四强概率", probPct(prediction?.["全国赛四强概率"])],
+  ]);
+  renderSharkProfile(team, style, prediction);
+  renderSharkPrediction(prediction);
+  renderSharkMapControl();
+  renderSharkOpening();
+  renderSharkMatches();
+  renderSharkGameMetrics();
+}
+
 function renderAnalysis() {
   const topic = document.querySelector("#analysisTopic").value;
   const term = document.querySelector("#analysisSearch").value.trim().toLowerCase();
@@ -692,6 +894,8 @@ async function init() {
     state.matchSideMetrics = window.RMUC_DATA.matchSideMetrics || [];
     state.teamStyles = window.RMUC_DATA.teamStyles || [];
     state.tournamentSimulation = window.RMUC_DATA.tournamentSimulation || [];
+    state.teamGameMetrics = window.RMUC_DATA.teamGameMetrics || [];
+    state.openingPositions = window.RMUC_DATA.openingPositions || [];
   } else {
     const [
       teams,
@@ -703,6 +907,8 @@ async function init() {
       matchSideMetrics,
       teamStyles,
       tournamentSimulation,
+      teamGameMetrics,
+      openingPositions,
     ] = await Promise.all([
       loadCsv("./data/all_qualified_team_tactical_profile_metrics.csv"),
       loadCsv("./data/all_handbook_h2h_matches_visuals.csv"),
@@ -713,6 +919,8 @@ async function init() {
       loadCsv("./data/analysis_match_side_metrics.csv"),
       loadCsv("./data/analysis_team_style_clusters.csv"),
       loadCsv("./data/simulation_tournament_probabilities.csv"),
+      loadCsv("./data/analysis_team_game_metrics.csv"),
+      loadCsv("./data/opening_positions_0_30s_by_role.csv"),
     ]);
     state.teams = teams;
     state.matches = matches;
@@ -723,6 +931,8 @@ async function init() {
     state.matchSideMetrics = matchSideMetrics;
     state.teamStyles = teamStyles;
     state.tournamentSimulation = tournamentSimulation;
+    state.teamGameMetrics = teamGameMetrics;
+    state.openingPositions = openingPositions;
   }
   renderMetrics();
   renderIntensityChart();
@@ -730,6 +940,7 @@ async function init() {
   renderProfileChart();
   renderTeamTable();
   renderPrediction();
+  renderSharkColumn();
   renderMatches();
   renderOpeningTable();
   renderAnalysis();
