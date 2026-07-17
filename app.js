@@ -7,6 +7,7 @@ const state = {
   mapTopZones: [],
   matchSideMetrics: [],
   teamStyles: [],
+  tournamentSimulation: [],
   selectedMapSchool: "",
   selectedTeam: "",
   selectedMatch: "",
@@ -66,6 +67,12 @@ function numberOf(value) {
 
 function pct(value) {
   return `${Math.round(numberOf(value) * 100)}%`;
+}
+
+function probPct(value) {
+  const percent = numberOf(value) * 100;
+  if (percent > 0 && percent < 0.1) return "<0.1%";
+  return `${fmt.format(percent)}%`;
 }
 
 function includesTerm(row, keys, term) {
@@ -500,6 +507,82 @@ function renderAnalysis() {
     return;
   }
 
+  if (topic === "simulation") {
+    renderTournamentSimulation(term);
+    return;
+  }
+
+}
+
+function simulationRankList(title, rows, metric, colorClass = "") {
+  const max = Math.max(...rows.map((row) => numberOf(row[metric])), 0.001);
+  return `
+    <section class="simulation-card">
+      <h3>${title}</h3>
+      <div class="simulation-ranks">
+        ${rows
+          .slice(0, 10)
+          .map((row) => {
+            const value = numberOf(row[metric]);
+            const width = Math.max(2, Math.min(100, (value / max) * 100));
+            return `
+              <div class="rank-row compact">
+                <span class="rank-label">
+                  <strong>${row["学校名"]}</strong>
+                  <span>${row["队伍名称"]} · ${row["参赛类别"]} · 强度 ${fmt.format(numberOf(row["模型强度分"]))}</span>
+                </span>
+                <span class="rank-track"><span class="rank-fill ${colorClass}" style="width:${width}%"></span></span>
+                <span class="rank-value">${probPct(value)}</span>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderTournamentSimulation(term) {
+  const rows = state.tournamentSimulation
+    .filter((row) => includesTerm(row, ["学校名", "队伍名称", "参赛类别", "全国赛种子梯队", "复活赛梯队"], term))
+    .sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]));
+  const allRows = state.tournamentSimulation;
+  const revivalRows = rows
+    .filter((row) => row["参赛类别"] === "复活赛")
+    .sort((a, b) => numberOf(b["复活赛晋级全国赛概率"]) - numberOf(a["复活赛晋级全国赛概率"]));
+  const topChampion = allRows.slice().sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]))[0];
+  const topRevival = allRows
+    .filter((row) => row["参赛类别"] === "复活赛")
+    .sort((a, b) => numberOf(b["复活赛晋级全国赛概率"]) - numberOf(a["复活赛晋级全国赛概率"]))[0];
+  renderDetailCards("#analysisSummary", [
+    ["专题", "赛程模拟预测"],
+    ["模拟次数", allRows[0]?.["模拟次数"] || "-"],
+    ["争冠最高", topChampion ? `${topChampion["学校名"]} ${probPct(topChampion["全国赛夺冠概率"])}` : "-"],
+    ["复活赛最高", topRevival ? `${topRevival["学校名"]} ${probPct(topRevival["复活赛晋级全国赛概率"])}` : "-"],
+  ]);
+  document.querySelector("#analysisChart").innerHTML = `
+    <div class="analysis-note">
+      按参赛手册抽签盒随机分组，并模拟复活赛 3 轮瑞士轮、复活赛双败名额争夺战、全国赛 5 轮瑞士轮、16 进 8/8 进 4 双败淘汰、半决赛和 BO5 决赛。概率来自区域赛指标模型，不代表官方预测。
+    </div>
+    <div class="simulation-grid">
+      ${simulationRankList("复活赛晋级全国赛概率", revivalRows, "复活赛晋级全国赛概率", "green")}
+      ${simulationRankList("全国赛夺冠概率", rows, "全国赛夺冠概率", "negative")}
+      ${simulationRankList("全国赛四强概率", rows.slice().sort((a, b) => numberOf(b["全国赛四强概率"]) - numberOf(a["全国赛四强概率"])), "全国赛四强概率")}
+    </div>
+  `;
+  const tableRows = rows
+    .slice()
+    .sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]) || numberOf(b["全国赛四强概率"]) - numberOf(a["全国赛四强概率"]));
+  renderDataTable("#analysisTable", tableRows, [
+    ["学校", (r) => r["学校名"]],
+    ["队名", (r) => r["队伍名称"]],
+    ["类别", (r) => r["参赛类别"]],
+    ["复活赛晋级国赛", (r) => (r["参赛类别"] === "复活赛" ? probPct(r["复活赛晋级全国赛概率"]) : "-")],
+    ["十六强", (r) => probPct(r["全国赛十六强概率"])],
+    ["八强", (r) => probPct(r["全国赛八强概率"])],
+    ["四强", (r) => probPct(r["全国赛四强概率"])],
+    ["冠军", (r) => probPct(r["全国赛夺冠概率"])],
+  ]);
 }
 
 function renderMapControlAnalysis(term) {
@@ -609,6 +692,7 @@ async function init() {
     state.mapTopZones = window.RMUC_DATA.mapTopZones || [];
     state.matchSideMetrics = window.RMUC_DATA.matchSideMetrics || [];
     state.teamStyles = window.RMUC_DATA.teamStyles || [];
+    state.tournamentSimulation = window.RMUC_DATA.tournamentSimulation || [];
   } else {
     const [
       teams,
@@ -619,6 +703,7 @@ async function init() {
       mapTopZones,
       matchSideMetrics,
       teamStyles,
+      tournamentSimulation,
     ] = await Promise.all([
       loadCsv("./data/all_qualified_team_tactical_profile_metrics.csv"),
       loadCsv("./data/all_handbook_h2h_matches_visuals.csv"),
@@ -628,6 +713,7 @@ async function init() {
       loadCsv("./data/analysis_map_control_top_zones.csv"),
       loadCsv("./data/analysis_match_side_metrics.csv"),
       loadCsv("./data/analysis_team_style_clusters.csv"),
+      loadCsv("./data/simulation_tournament_probabilities.csv"),
     ]);
     state.teams = teams;
     state.matches = matches;
@@ -637,6 +723,7 @@ async function init() {
     state.mapTopZones = mapTopZones;
     state.matchSideMetrics = matchSideMetrics;
     state.teamStyles = teamStyles;
+    state.tournamentSimulation = tournamentSimulation;
   }
   renderMetrics();
   renderIntensityChart();

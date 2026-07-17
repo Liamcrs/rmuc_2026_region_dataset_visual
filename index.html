@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RMUC 2026 分区赛数据可视化</title>
-    <link rel="stylesheet" href="./styles.css?v=map-control-refine-20260718" />
+    <link rel="stylesheet" href="./styles.css?v=tournament-simulation-20260718" />
   </head>
   <body>
     <header class="app-header">
@@ -149,12 +149,13 @@
           <div class="panel-head">
             <div>
               <h2>专题分析</h2>
-              <p>围绕科技核心、地图控制、对局详情和队伍风格展开。</p>
+              <p>围绕科技核心、地图控制、赛程模拟、对局详情和队伍风格展开。</p>
             </div>
             <div class="filters">
               <select id="analysisTopic">
                 <option value="assembly">科技核心/工程</option>
                 <option value="map">地图控制区域</option>
+                <option value="simulation">赛程模拟预测</option>
                 <option value="match">对局详情</option>
                 <option value="style">队伍风格聚类</option>
               </select>
@@ -259,6 +260,8 @@
             <a href="./data/opening_positions_0_30s_by_role.csv">开局兵种站位 CSV</a>
             <a href="./data/analysis_map_control_top_zones.csv">地图控制最高区域 CSV</a>
             <a href="./data/analysis_team_style_clusters.csv">队伍风格 CSV</a>
+            <a href="./data/simulation_tournament_probabilities.csv">赛程模拟概率 CSV</a>
+            <a href="./docs/simulation_model_notes.md">赛程模拟模型说明</a>
             <a href="./docs/tactical_profile_explanation.md">战术收益画像说明</a>
             <a href="./docs/all_requested_matches_report_index.md">逐场报告索引</a>
           </div>
@@ -266,7 +269,7 @@
       </section>
     </main>
 
-    <script src="./data.js?v=map-control-refine-20260718"></script>
-    <script src="./app.js?v=map-control-refine-20260718"></script>
+    <script src="./data.js?v=tournament-simulation-20260718"></script>
+    <script src="./app.js?v=tournament-simulation-20260718"></script>
   </body>
 </html>

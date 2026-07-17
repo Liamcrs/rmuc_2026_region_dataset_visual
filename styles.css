@@ -395,6 +395,36 @@ button {
   font-size: 13px;
 }
 
+.simulation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.simulation-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.simulation-card h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.simulation-ranks {
+  display: grid;
+  gap: 8px;
+}
+
+.rank-row.compact {
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) 62px;
+  min-height: 38px;
+  padding: 8px;
+}
+
 .map-control-layout {
   display: grid;
   grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
@@ -692,6 +722,7 @@ td:last-child {
   .split,
   .match-workspace,
   .map-control-layout,
+  .simulation-grid,
   .profile-row,
   .rank-row,
   .detail-strip,
