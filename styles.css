@@ -172,6 +172,134 @@ button {
   border-radius: 6px;
 }
 
+.profile-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-legend i {
+  width: 22px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.legend-fire {
+  background: #c44e52;
+}
+
+.legend-assembly {
+  background: #55a868;
+}
+
+.legend-dart {
+  background: #4c72b0;
+}
+
+.profile-chart {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 260px) minmax(0, 1fr) 78px;
+  gap: 12px;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.profile-row:hover,
+.profile-row.is-active {
+  background: #eef4ff;
+  border-color: #b9cdf2;
+}
+
+.profile-team {
+  min-width: 0;
+}
+
+.profile-team strong,
+.profile-team span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-team strong {
+  font-size: 14px;
+}
+
+.profile-team span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.profile-bars {
+  display: grid;
+  gap: 5px;
+}
+
+.profile-bar {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 70px;
+  gap: 8px;
+  align-items: center;
+}
+
+.profile-bar-label,
+.profile-bar-value,
+.profile-score {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.profile-track {
+  height: 8px;
+  overflow: hidden;
+  background: #e9edf3;
+  border-radius: 999px;
+}
+
+.profile-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.profile-fill.fire {
+  background: #c44e52;
+}
+
+.profile-fill.assembly {
+  background: #55a868;
+}
+
+.profile-fill.dart {
+  background: #4c72b0;
+}
+
+.profile-score strong {
+  display: block;
+  color: var(--ink);
+  font-size: 15px;
+}
+
 .filters {
   display: flex;
   align-items: center;
@@ -370,6 +498,7 @@ td:last-child {
   .metric-grid,
   .split,
   .match-workspace,
+  .profile-row,
   .detail-strip,
   .download-grid {
     grid-template-columns: 1fr;

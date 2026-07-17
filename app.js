@@ -132,8 +132,89 @@ function renderTeamTable() {
     row.addEventListener("click", () => {
       state.selectedTeam = row.dataset.school;
       renderTeamTable();
+      renderProfileChart();
     });
   });
+}
+
+function profileValue(row, mode, maxes) {
+  const fire = numberOf(row["火力收益_平均造成伤害"]);
+  const assembly = numberOf(row["装配收益指数_显示用"]);
+  const dart = numberOf(row["飞镖收益指数_显示用"]);
+  if (mode === "fire") return fire;
+  if (mode === "assembly") return numberOf(row["平均装配次数"]);
+  if (mode === "dart") return numberOf(row["平均飞镖伤害"]);
+  if (mode === "win") return numberOf(row["区域赛胜局率"]);
+  const fireScore = maxes.fire ? fire / maxes.fire : 0;
+  const assemblyScore = maxes.assembly ? assembly / maxes.assembly : 0;
+  const dartScore = maxes.dart ? dart / maxes.dart : 0;
+  return (fireScore + assemblyScore + dartScore) / 3;
+}
+
+function renderProfileChart() {
+  const search = document.querySelector("#profileSearch").value.trim().toLowerCase();
+  const category = document.querySelector("#profileCategory").value;
+  const mode = document.querySelector("#profileMetric").value;
+  const limit = numberOf(document.querySelector("#profileLimit").value);
+  const maxes = {
+    fire: Math.max(...state.teams.map((row) => numberOf(row["火力收益_平均造成伤害"]))),
+    assembly: Math.max(...state.teams.map((row) => numberOf(row["装配收益指数_显示用"]))),
+    dart: Math.max(...state.teams.map((row) => numberOf(row["飞镖收益指数_显示用"]))),
+  };
+  const rows = state.teams
+    .filter((row) => !category || row["手册参赛类别"] === category)
+    .filter((row) => {
+      const haystack = `${row["学校名"]} ${row["队伍名称"]} ${row["战术画像"]}`.toLowerCase();
+      return haystack.includes(search);
+    })
+    .sort((a, b) => profileValue(b, mode, maxes) - profileValue(a, mode, maxes))
+    .slice(0, limit || state.teams.length);
+
+  if (!rows.some((row) => row["学校名"] === state.selectedTeam)) {
+    state.selectedTeam = rows[0]?.["学校名"] || state.selectedTeam;
+  }
+
+  document.querySelector("#profileChart").innerHTML = rows
+    .map((row) => {
+      const fire = numberOf(row["火力收益_平均造成伤害"]);
+      const assembly = numberOf(row["装配收益指数_显示用"]);
+      const dart = numberOf(row["飞镖收益指数_显示用"]);
+      const combined = profileValue(row, "combined", maxes) * 100;
+      return `
+        <button class="profile-row ${row["学校名"] === state.selectedTeam ? "is-active" : ""}" data-school="${row["学校名"]}">
+          <span class="profile-team">
+            <strong>${row["学校名"]}</strong>
+            <span>${row["队伍名称"]} · ${row["手册参赛类别"]} · 胜局率 ${pct(row["区域赛胜局率"])}</span>
+          </span>
+          <span class="profile-bars">
+            ${profileBar("火力", "fire", fire, maxes.fire)}
+            ${profileBar("装配", "assembly", assembly, maxes.assembly, numberOf(row["平均装配次数"]))}
+            ${profileBar("飞镖", "dart", dart, maxes.dart, numberOf(row["平均飞镖伤害"]))}
+          </span>
+          <span class="profile-score"><span>综合</span><strong>${fmt.format(combined)}</strong></span>
+        </button>
+      `;
+    })
+    .join("");
+
+  document.querySelectorAll(".profile-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      state.selectedTeam = row.dataset.school;
+      renderProfileChart();
+      renderTeamTable();
+    });
+  });
+}
+
+function profileBar(label, className, value, max, rawValue = value) {
+  const width = max ? Math.max(2, Math.min(100, (value / max) * 100)) : 0;
+  return `
+    <span class="profile-bar">
+      <span class="profile-bar-label">${label}</span>
+      <span class="profile-track"><span class="profile-fill ${className}" style="width:${width}%"></span></span>
+      <span class="profile-bar-value">${fmt.format(rawValue)}</span>
+    </span>
+  `;
 }
 
 function renderTeamDetail(row) {
@@ -229,13 +310,6 @@ function bindInteractions() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view));
   });
-  document.querySelectorAll("#profileImageTabs button").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.querySelectorAll("#profileImageTabs button").forEach((item) => item.classList.remove("is-active"));
-      button.classList.add("is-active");
-      document.querySelector("#profileImage").src = button.dataset.src;
-    });
-  });
   document.querySelectorAll("#roleTabs button").forEach((button) => {
     button.addEventListener("click", () => {
       document.querySelectorAll("#roleTabs button").forEach((item) => item.classList.remove("is-active"));
@@ -257,6 +331,9 @@ function bindInteractions() {
   });
   ["teamSearch", "teamCategory", "teamSort"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderTeamTable);
+  });
+  ["profileSearch", "profileCategory", "profileMetric", "profileLimit"].forEach((id) => {
+    document.querySelector(`#${id}`).addEventListener("input", renderProfileChart);
   });
   ["matchSearch", "matchSide"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderMatches);
@@ -280,6 +357,7 @@ async function init() {
     state.opening = opening;
   }
   renderMetrics();
+  renderProfileChart();
   renderTeamTable();
   renderMatches();
   renderOpeningTable();

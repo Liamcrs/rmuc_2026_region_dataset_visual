@@ -54,16 +54,35 @@
           <div class="panel-head">
             <div>
               <h2>队伍战术收益画像</h2>
-              <p>红色为火力收益，绿色为科技核心装配收益，蓝色为飞镖收益。</p>
+              <p>交互式条形图：筛选、排序并点击队伍查看详情。</p>
             </div>
-            <div class="segmented" id="profileImageTabs">
-              <button class="is-active" data-src="./assets/team_profiles/all_qualified_team_tactical_profile.png">全部</button>
-              <button data-src="./assets/team_profiles/national_qualified_team_tactical_profile.png">全国赛</button>
-              <button data-src="./assets/team_profiles/revival_team_tactical_profile.png">复活赛</button>
-              <button data-src="./assets/team_profiles/all_qualified_team_tactical_profile_normalized_stack.png">标准分</button>
+            <div class="filters">
+              <input id="profileSearch" type="search" placeholder="搜索学校或队名" />
+              <select id="profileCategory">
+                <option value="">全部类别</option>
+                <option value="全国赛">全国赛</option>
+                <option value="复活赛">复活赛</option>
+              </select>
+              <select id="profileMetric">
+                <option value="combined">综合</option>
+                <option value="fire">火力</option>
+                <option value="assembly">装配</option>
+                <option value="dart">飞镖</option>
+                <option value="win">胜局率</option>
+              </select>
+              <select id="profileLimit">
+                <option value="12">显示 12 支</option>
+                <option value="20">显示 20 支</option>
+                <option value="44">显示全部</option>
+              </select>
             </div>
           </div>
-          <img id="profileImage" class="wide-figure" src="./assets/team_profiles/all_qualified_team_tactical_profile.png" alt="队伍战术收益画像" />
+          <div class="profile-legend" aria-label="图例">
+            <span><i class="legend-fire"></i>平均造成伤害</span>
+            <span><i class="legend-assembly"></i>平均装配次数 x1400</span>
+            <span><i class="legend-dart"></i>平均飞镖伤害 x8</span>
+          </div>
+          <div id="profileChart" class="profile-chart" aria-label="队伍战术收益画像"></div>
         </section>
 
         <section class="panel">
