@@ -421,6 +421,119 @@ function renderOpeningTable() {
     .join("");
 }
 
+function predictionRows() {
+  const term = document.querySelector("#predictionSearch").value.trim().toLowerCase();
+  const category = document.querySelector("#predictionCategory").value;
+  const styleBySchool = Object.fromEntries(state.teamStyles.map((row) => [row["学校名"], row]));
+  return state.tournamentSimulation
+    .map((row) => {
+      const style = styleBySchool[row["学校名"]] || {};
+      return { ...row, ...style, "预测类别": row["参赛类别"] };
+    })
+    .filter((row) => !category || row["参赛类别"] === category)
+    .filter((row) => includesTerm(row, ["学校名", "队伍名称", "参赛类别", "全国赛种子梯队", "复活赛梯队", "风格分类"], term));
+}
+
+function simulationRankList(title, rows, metric, colorClass = "") {
+  const max = Math.max(...rows.map((row) => numberOf(row[metric])), 0.001);
+  return `
+    <section class="simulation-card">
+      <h3>${title}</h3>
+      <div class="simulation-ranks">
+        ${rows
+          .slice(0, 10)
+          .map((row) => {
+            const value = numberOf(row[metric]);
+            const width = Math.max(2, Math.min(100, (value / max) * 100));
+            return `
+              <div class="rank-row compact">
+                <span class="rank-label">
+                  <strong>${row["学校名"]}</strong>
+                  <span>${row["队伍名称"]} · ${row["风格分类"] || "未分类"} · 强度 ${fmt.format(numberOf(row["模型强度分"]))}</span>
+                </span>
+                <span class="rank-track"><span class="rank-fill ${colorClass}" style="width:${width}%"></span></span>
+                <span class="rank-value">${probPct(value)}</span>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderPredictionStyleChart(rows) {
+  const groups = rows.reduce((acc, row) => {
+    const key = row["风格分类"] || "未分类";
+    acc[key] ||= [];
+    acc[key].push(row);
+    return acc;
+  }, {});
+  const sorted = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  document.querySelector("#predictionStyleChart").innerHTML = sorted
+    .map(([style, styleRows]) => {
+      const leader = styleRows.slice().sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]))[0];
+      const avgTop4 = styleRows.reduce((sum, row) => sum + numberOf(row["全国赛四强概率"]), 0) / styleRows.length;
+      return `
+        <div class="style-cluster-card">
+          <span>
+            <strong>${style}</strong>
+            <em>${styleRows.length} 支 · 平均四强 ${probPct(avgTop4)}</em>
+          </span>
+          <span>
+            <strong>${leader?.["学校名"] || "-"}</strong>
+            <em>组内争冠最高 ${leader ? probPct(leader["全国赛夺冠概率"]) : "-"}</em>
+          </span>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderPrediction() {
+  const sortKey = document.querySelector("#predictionSort").value;
+  const rows = predictionRows();
+  const sortedRows = rows
+    .slice()
+    .sort((a, b) => numberOf(b[sortKey]) - numberOf(a[sortKey]) || numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]));
+  const topChampion = state.tournamentSimulation.slice().sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]))[0];
+  const topRevival = state.tournamentSimulation
+    .filter((row) => row["参赛类别"] === "复活赛")
+    .sort((a, b) => numberOf(b["复活赛晋级全国赛概率"]) - numberOf(a["复活赛晋级全国赛概率"]))[0];
+
+  renderDetailCards("#predictionSummary", [
+    ["筛选队伍", `${rows.length} 支`],
+    ["模拟次数", state.tournamentSimulation[0]?.["模拟次数"] || "-"],
+    ["争冠最高", topChampion ? `${topChampion["学校名"]} ${probPct(topChampion["全国赛夺冠概率"])}` : "-"],
+    ["复活赛最高", topRevival ? `${topRevival["学校名"]} ${probPct(topRevival["复活赛晋级全国赛概率"])}` : "-"],
+  ]);
+  const revivalRows = rows
+    .filter((row) => row["参赛类别"] === "复活赛")
+    .sort((a, b) => numberOf(b["复活赛晋级全国赛概率"]) - numberOf(a["复活赛晋级全国赛概率"]));
+  document.querySelector("#predictionSimulationChart").innerHTML = `
+    <div class="analysis-note">
+      按参赛手册抽签盒随机分组，并模拟复活赛 3 轮瑞士轮、复活赛双败名额争夺战、全国赛 5 轮瑞士轮、16 进 8/8 进 4 双败淘汰、半决赛和 BO5 决赛。概率来自区域赛指标模型，不代表官方预测。
+    </div>
+    <div class="simulation-grid">
+      ${simulationRankList("复活赛晋级全国赛概率", revivalRows, "复活赛晋级全国赛概率", "green")}
+      ${simulationRankList("全国赛夺冠概率", rows.slice().sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"])), "全国赛夺冠概率", "negative")}
+      ${simulationRankList("全国赛四强概率", rows.slice().sort((a, b) => numberOf(b["全国赛四强概率"]) - numberOf(a["全国赛四强概率"])), "全国赛四强概率")}
+    </div>
+  `;
+  renderDataTable("#predictionTable", sortedRows, [
+    ["学校", (r) => r["学校名"]],
+    ["队名", (r) => r["队伍名称"]],
+    ["类别", (r) => r["参赛类别"]],
+    ["风格", (r) => r["风格分类"] || "-"],
+    ["复活赛晋级", (r) => (r["参赛类别"] === "复活赛" ? probPct(r["复活赛晋级全国赛概率"]) : "-")],
+    ["十六强", (r) => probPct(r["全国赛十六强概率"])],
+    ["八强", (r) => probPct(r["全国赛八强概率"])],
+    ["四强", (r) => probPct(r["全国赛四强概率"])],
+    ["冠军", (r) => probPct(r["全国赛夺冠概率"])],
+  ]);
+  renderPredictionStyleChart(rows);
+}
+
 function renderAnalysis() {
   const topic = document.querySelector("#analysisTopic").value;
   const term = document.querySelector("#analysisSearch").value.trim().toLowerCase();
@@ -431,13 +544,6 @@ function renderAnalysis() {
       rows: state.assemblyTeams,
       metric: "平均装配次数",
       sub: (r) => `总装配 ${fmt.format(numberOf(r["总装配次数"]))} · L3 ${fmt.format(numberOf(r["L3"]))} · 首装 ${fmt.format(numberOf(r["平均首次装配时间"]))}s`,
-    },
-    style: {
-      title: "队伍风格聚类",
-      rows: state.teamStyles,
-      metric: "胜局率",
-      sub: (r) => `${r["风格分类"]} · 火力 ${fmt.format(numberOf(r["平均造成伤害_分"]))} / 装配 ${fmt.format(numberOf(r["平均装配次数_分"]))}`,
-      format: (v) => pct(v),
     },
   };
 
@@ -474,115 +580,6 @@ function renderAnalysis() {
     return;
   }
 
-  if (topic === "match") {
-    const rows = state.matches
-      .filter((row) => includesTerm(row, ["赛区", "红方学校", "蓝方学校", "胜方学校"], term))
-      .sort((a, b) => numberOf(b["场总伤害"]) - numberOf(a["场总伤害"]))
-      .slice(0, 25);
-    renderDetailCards("#analysisSummary", [
-      ["专题", "对局详情"],
-      ["显示", `${rows.length} 场`],
-      ["排序指标", "场总伤害"],
-      ["筛选", term || "无"],
-    ]);
-    renderRankRows("#analysisChart", rows, {
-      clickable: true,
-      id: (row) => row["序号"],
-      label: (row) => `${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}`,
-      sub: (row) => `${row["赛区"]} 第${row["场次号"]}场 · 胜方 ${row["胜方学校"]}`,
-      value: (row) => row["场总伤害"],
-      onClick: (id) => {
-        state.selectedMatch = id;
-        setView("matches");
-        renderMatches();
-      },
-    });
-    renderDataTable("#analysisTable", rows, [
-      ["赛区", (r) => r["赛区"]],
-      ["场次", (r) => `第${r["场次号"]}场`],
-      ["对阵", (r) => `${r["红方学校"]} ${r["红胜局"]}:${r["蓝胜局"]} ${r["蓝方学校"]}`],
-      ["胜方", (r) => r["胜方学校"]],
-      ["场总伤害", (r) => fmt.format(numberOf(r["场总伤害"]))],
-    ]);
-    return;
-  }
-
-  if (topic === "simulation") {
-    renderTournamentSimulation(term);
-    return;
-  }
-
-}
-
-function simulationRankList(title, rows, metric, colorClass = "") {
-  const max = Math.max(...rows.map((row) => numberOf(row[metric])), 0.001);
-  return `
-    <section class="simulation-card">
-      <h3>${title}</h3>
-      <div class="simulation-ranks">
-        ${rows
-          .slice(0, 10)
-          .map((row) => {
-            const value = numberOf(row[metric]);
-            const width = Math.max(2, Math.min(100, (value / max) * 100));
-            return `
-              <div class="rank-row compact">
-                <span class="rank-label">
-                  <strong>${row["学校名"]}</strong>
-                  <span>${row["队伍名称"]} · ${row["参赛类别"]} · 强度 ${fmt.format(numberOf(row["模型强度分"]))}</span>
-                </span>
-                <span class="rank-track"><span class="rank-fill ${colorClass}" style="width:${width}%"></span></span>
-                <span class="rank-value">${probPct(value)}</span>
-              </div>
-            `;
-          })
-          .join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderTournamentSimulation(term) {
-  const rows = state.tournamentSimulation
-    .filter((row) => includesTerm(row, ["学校名", "队伍名称", "参赛类别", "全国赛种子梯队", "复活赛梯队"], term))
-    .sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]));
-  const allRows = state.tournamentSimulation;
-  const revivalRows = rows
-    .filter((row) => row["参赛类别"] === "复活赛")
-    .sort((a, b) => numberOf(b["复活赛晋级全国赛概率"]) - numberOf(a["复活赛晋级全国赛概率"]));
-  const topChampion = allRows.slice().sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]))[0];
-  const topRevival = allRows
-    .filter((row) => row["参赛类别"] === "复活赛")
-    .sort((a, b) => numberOf(b["复活赛晋级全国赛概率"]) - numberOf(a["复活赛晋级全国赛概率"]))[0];
-  renderDetailCards("#analysisSummary", [
-    ["专题", "赛程模拟预测"],
-    ["模拟次数", allRows[0]?.["模拟次数"] || "-"],
-    ["争冠最高", topChampion ? `${topChampion["学校名"]} ${probPct(topChampion["全国赛夺冠概率"])}` : "-"],
-    ["复活赛最高", topRevival ? `${topRevival["学校名"]} ${probPct(topRevival["复活赛晋级全国赛概率"])}` : "-"],
-  ]);
-  document.querySelector("#analysisChart").innerHTML = `
-    <div class="analysis-note">
-      按参赛手册抽签盒随机分组，并模拟复活赛 3 轮瑞士轮、复活赛双败名额争夺战、全国赛 5 轮瑞士轮、16 进 8/8 进 4 双败淘汰、半决赛和 BO5 决赛。概率来自区域赛指标模型，不代表官方预测。
-    </div>
-    <div class="simulation-grid">
-      ${simulationRankList("复活赛晋级全国赛概率", revivalRows, "复活赛晋级全国赛概率", "green")}
-      ${simulationRankList("全国赛夺冠概率", rows, "全国赛夺冠概率", "negative")}
-      ${simulationRankList("全国赛四强概率", rows.slice().sort((a, b) => numberOf(b["全国赛四强概率"]) - numberOf(a["全国赛四强概率"])), "全国赛四强概率")}
-    </div>
-  `;
-  const tableRows = rows
-    .slice()
-    .sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]) || numberOf(b["全国赛四强概率"]) - numberOf(a["全国赛四强概率"]));
-  renderDataTable("#analysisTable", tableRows, [
-    ["学校", (r) => r["学校名"]],
-    ["队名", (r) => r["队伍名称"]],
-    ["类别", (r) => r["参赛类别"]],
-    ["复活赛晋级国赛", (r) => (r["参赛类别"] === "复活赛" ? probPct(r["复活赛晋级全国赛概率"]) : "-")],
-    ["十六强", (r) => probPct(r["全国赛十六强概率"])],
-    ["八强", (r) => probPct(r["全国赛八强概率"])],
-    ["四强", (r) => probPct(r["全国赛四强概率"])],
-    ["冠军", (r) => probPct(r["全国赛夺冠概率"])],
-  ]);
 }
 
 function renderMapControlAnalysis(term) {
@@ -673,6 +670,9 @@ function bindInteractions() {
   ["intensitySearch", "intensityLimit"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderIntensityChart);
   });
+  ["predictionSearch", "predictionCategory", "predictionSort"].forEach((id) => {
+    document.querySelector(`#${id}`).addEventListener("input", renderPrediction);
+  });
   ["analysisTopic", "analysisSearch"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderAnalysis);
   });
@@ -730,6 +730,7 @@ async function init() {
   renderOverviewProfileChart();
   renderProfileChart();
   renderTeamTable();
+  renderPrediction();
   renderMatches();
   renderOpeningTable();
   renderAnalysis();

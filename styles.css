@@ -425,6 +425,42 @@ button {
   padding: 8px;
 }
 
+.style-cluster-list {
+  display: grid;
+  gap: 10px;
+}
+
+.style-cluster-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.style-cluster-card span,
+.style-cluster-card strong,
+.style-cluster-card em {
+  display: block;
+  min-width: 0;
+}
+
+.style-cluster-card strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.style-cluster-card em {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .map-control-layout {
   display: grid;
   grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
@@ -723,6 +759,7 @@ td:last-child {
   .match-workspace,
   .map-control-layout,
   .simulation-grid,
+  .style-cluster-card,
   .profile-row,
   .rank-row,
   .detail-strip,
