@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RMUC 2026 分区赛数据可视化</title>
-    <link rel="stylesheet" href="./styles.css?v=interactive-profile-20260718" />
+    <link rel="stylesheet" href="./styles.css?v=interactive-bars-20260718" />
   </head>
   <body>
     <header class="app-header">
@@ -36,9 +36,17 @@
         <section class="split">
           <div class="panel">
             <div class="panel-head">
-              <h2>全部晋级队伍画像</h2>
+              <div>
+                <h2>队伍收益画像速览</h2>
+                <p>按综合收益展示前 8 支队伍。</p>
+              </div>
             </div>
-            <img class="wide-figure" src="./assets/team_profiles/all_qualified_team_tactical_profile.png" alt="全部晋级队伍战术收益画像" />
+            <div class="profile-legend compact" aria-label="图例">
+              <span><i class="legend-fire"></i>火力</span>
+              <span><i class="legend-assembly"></i>装配</span>
+              <span><i class="legend-dart"></i>飞镖</span>
+            </div>
+            <div id="overviewProfileChart" class="profile-chart compact" aria-label="队伍收益画像速览"></div>
           </div>
           <div class="panel">
             <div class="panel-head">
@@ -224,7 +232,7 @@
       </section>
     </main>
 
-    <script src="./data.js?v=interactive-profile-20260718"></script>
-    <script src="./app.js?v=interactive-profile-20260718"></script>
+    <script src="./data.js?v=interactive-bars-20260718"></script>
+    <script src="./app.js?v=interactive-bars-20260718"></script>
   </body>
 </html>

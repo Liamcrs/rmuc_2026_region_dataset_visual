@@ -7,6 +7,9 @@
   --line: #d8dee8;
   --accent: #2457a6;
   --accent-2: #b53737;
+  --fire: #d83a34;
+  --assembly: #169b62;
+  --dart: #276bd8;
   --shadow: 0 10px 28px rgba(23, 32, 42, 0.08);
 }
 
@@ -195,15 +198,15 @@ button {
 }
 
 .legend-fire {
-  background: #c44e52;
+  background: var(--fire);
 }
 
 .legend-assembly {
-  background: #55a868;
+  background: var(--assembly);
 }
 
 .legend-dart {
-  background: #4c72b0;
+  background: var(--dart);
 }
 
 .profile-chart {
@@ -222,12 +225,14 @@ button {
   border-radius: 8px;
   background: #fff;
   cursor: pointer;
+  box-shadow: inset 4px 0 0 #d9e2ef;
 }
 
 .profile-row:hover,
 .profile-row.is-active {
   background: #eef4ff;
   border-color: #b9cdf2;
+  box-shadow: inset 4px 0 0 var(--accent);
 }
 
 .profile-team {
@@ -273,31 +278,55 @@ button {
 .profile-track {
   height: 8px;
   overflow: hidden;
-  background: #e9edf3;
+  background: #e1e7f0;
   border-radius: 999px;
 }
 
 .profile-fill {
+  display: block;
   height: 100%;
   border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.42) inset;
 }
 
 .profile-fill.fire {
-  background: #c44e52;
+  background: linear-gradient(90deg, #f29a8e, var(--fire));
 }
 
 .profile-fill.assembly {
-  background: #55a868;
+  background: linear-gradient(90deg, #77d9a3, var(--assembly));
 }
 
 .profile-fill.dart {
-  background: #4c72b0;
+  background: linear-gradient(90deg, #8bb6ff, var(--dart));
 }
 
 .profile-score strong {
   display: block;
   color: var(--ink);
   font-size: 15px;
+}
+
+.profile-chart.compact {
+  gap: 8px;
+}
+
+.profile-legend.compact {
+  margin-bottom: 10px;
+}
+
+.profile-chart.compact .profile-row {
+  grid-template-columns: minmax(140px, 210px) minmax(0, 1fr) 60px;
+  min-height: 50px;
+  padding: 8px;
+}
+
+.profile-chart.compact .profile-bar {
+  grid-template-columns: 42px minmax(0, 1fr) 48px;
+}
+
+.profile-chart.compact .profile-team span {
+  display: none;
 }
 
 .filters {

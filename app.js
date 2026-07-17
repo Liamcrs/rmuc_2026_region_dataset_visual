@@ -133,6 +133,7 @@ function renderTeamTable() {
       state.selectedTeam = row.dataset.school;
       renderTeamTable();
       renderProfileChart();
+      renderOverviewProfileChart();
     });
   });
 }
@@ -151,30 +152,16 @@ function profileValue(row, mode, maxes) {
   return (fireScore + assemblyScore + dartScore) / 3;
 }
 
-function renderProfileChart() {
-  const search = document.querySelector("#profileSearch").value.trim().toLowerCase();
-  const category = document.querySelector("#profileCategory").value;
-  const mode = document.querySelector("#profileMetric").value;
-  const limit = numberOf(document.querySelector("#profileLimit").value);
-  const maxes = {
+function profileMaxes() {
+  return {
     fire: Math.max(...state.teams.map((row) => numberOf(row["火力收益_平均造成伤害"]))),
     assembly: Math.max(...state.teams.map((row) => numberOf(row["装配收益指数_显示用"]))),
     dart: Math.max(...state.teams.map((row) => numberOf(row["飞镖收益指数_显示用"]))),
   };
-  const rows = state.teams
-    .filter((row) => !category || row["手册参赛类别"] === category)
-    .filter((row) => {
-      const haystack = `${row["学校名"]} ${row["队伍名称"]} ${row["战术画像"]}`.toLowerCase();
-      return haystack.includes(search);
-    })
-    .sort((a, b) => profileValue(b, mode, maxes) - profileValue(a, mode, maxes))
-    .slice(0, limit || state.teams.length);
+}
 
-  if (!rows.some((row) => row["学校名"] === state.selectedTeam)) {
-    state.selectedTeam = rows[0]?.["学校名"] || state.selectedTeam;
-  }
-
-  document.querySelector("#profileChart").innerHTML = rows
+function profileRowsMarkup(rows, maxes) {
+  return rows
     .map((row) => {
       const fire = numberOf(row["火力收益_平均造成伤害"]);
       const assembly = numberOf(row["装配收益指数_显示用"]);
@@ -196,14 +183,51 @@ function renderProfileChart() {
       `;
     })
     .join("");
+}
 
-  document.querySelectorAll(".profile-row").forEach((row) => {
+function bindProfileRows(selector, options = {}) {
+  document.querySelectorAll(selector).forEach((row) => {
     row.addEventListener("click", () => {
       state.selectedTeam = row.dataset.school;
       renderProfileChart();
+      renderOverviewProfileChart();
       renderTeamTable();
+      if (options.openTeams) setView("teams");
     });
   });
+}
+
+function renderOverviewProfileChart() {
+  const maxes = profileMaxes();
+  const rows = state.teams
+    .slice()
+    .sort((a, b) => profileValue(b, "combined", maxes) - profileValue(a, "combined", maxes))
+    .slice(0, 8);
+  document.querySelector("#overviewProfileChart").innerHTML = profileRowsMarkup(rows, maxes);
+  bindProfileRows("#overviewProfileChart .profile-row", { openTeams: true });
+}
+
+function renderProfileChart() {
+  const search = document.querySelector("#profileSearch").value.trim().toLowerCase();
+  const category = document.querySelector("#profileCategory").value;
+  const mode = document.querySelector("#profileMetric").value;
+  const limit = numberOf(document.querySelector("#profileLimit").value);
+  const maxes = profileMaxes();
+  const rows = state.teams
+    .filter((row) => !category || row["手册参赛类别"] === category)
+    .filter((row) => {
+      const haystack = `${row["学校名"]} ${row["队伍名称"]} ${row["战术画像"]}`.toLowerCase();
+      return haystack.includes(search);
+    })
+    .sort((a, b) => profileValue(b, mode, maxes) - profileValue(a, mode, maxes))
+    .slice(0, limit || state.teams.length);
+
+  if (!rows.some((row) => row["学校名"] === state.selectedTeam)) {
+    state.selectedTeam = rows[0]?.["学校名"] || state.selectedTeam;
+  }
+
+  document.querySelector("#profileChart").innerHTML = profileRowsMarkup(rows, maxes);
+  bindProfileRows("#profileChart .profile-row");
 }
 
 function profileBar(label, className, value, max, rawValue = value) {
@@ -357,6 +381,7 @@ async function init() {
     state.opening = opening;
   }
   renderMetrics();
+  renderOverviewProfileChart();
   renderProfileChart();
   renderTeamTable();
   renderMatches();
