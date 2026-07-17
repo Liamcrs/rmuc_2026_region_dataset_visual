@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RMUC 2026 分区赛数据可视化</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">RMUC 2026</p>
+        <h1>分区赛战术数据可视化</h1>
+      </div>
+      <nav class="nav-tabs" aria-label="视图切换">
+        <button class="tab is-active" data-view="overview">总览</button>
+        <button class="tab" data-view="teams">队伍画像</button>
+        <button class="tab" data-view="matches">对局地图</button>
+        <button class="tab" data-view="opening">开局布置</button>
+        <button class="tab" data-view="data">数据</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="overview" class="view is-active">
+        <div class="metric-grid" id="metricGrid"></div>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>对抗强度总览</h2>
+              <p>红蓝双方均为全国赛或复活赛手册队伍的全量对局。</p>
+            </div>
+          </div>
+          <img class="wide-figure" src="./assets/h2h_all/all_handbook_h2h_intensity_top40.png" alt="全部比赛对抗强度总览" />
+        </section>
+        <section class="split">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>全部晋级队伍画像</h2>
+            </div>
+            <img class="wide-figure" src="./assets/team_profiles/all_qualified_team_tactical_profile.png" alt="全部晋级队伍战术收益画像" />
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>开局兵种布置</h2>
+            </div>
+            <img class="wide-figure" src="./assets/opening/opening_rulemap_all_roles_panels.png" alt="开局兵种布置总览" />
+          </div>
+        </section>
+      </section>
+
+      <section id="teams" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>队伍战术收益画像</h2>
+              <p>红色为火力收益，绿色为科技核心装配收益，蓝色为飞镖收益。</p>
+            </div>
+            <div class="segmented" id="profileImageTabs">
+              <button class="is-active" data-src="./assets/team_profiles/all_qualified_team_tactical_profile.png">全部</button>
+              <button data-src="./assets/team_profiles/national_qualified_team_tactical_profile.png">全国赛</button>
+              <button data-src="./assets/team_profiles/revival_team_tactical_profile.png">复活赛</button>
+              <button data-src="./assets/team_profiles/all_qualified_team_tactical_profile_normalized_stack.png">标准分</button>
+            </div>
+          </div>
+          <img id="profileImage" class="wide-figure" src="./assets/team_profiles/all_qualified_team_tactical_profile.png" alt="队伍战术收益画像" />
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>队伍指标表</h2>
+              <p>44 支已命名手册队伍均匹配到区域赛指标。</p>
+            </div>
+            <div class="filters">
+              <input id="teamSearch" type="search" placeholder="搜索学校或队名" />
+              <select id="teamCategory">
+                <option value="">全部类别</option>
+                <option value="全国赛">全国赛</option>
+                <option value="复活赛">复活赛</option>
+              </select>
+              <select id="teamSort">
+                <option value="区域赛胜局率">胜局率</option>
+                <option value="火力收益_平均造成伤害">火力</option>
+                <option value="平均装配次数">装配</option>
+                <option value="平均飞镖伤害">飞镖</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="teamTable">
+              <thead>
+                <tr>
+                  <th>学校</th>
+                  <th>队名</th>
+                  <th>类别</th>
+                  <th>胜局率</th>
+                  <th>平均伤害</th>
+                  <th>装配</th>
+                  <th>飞镖</th>
+                  <th>战术画像</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="matches" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>官方场地图对局图集</h2>
+              <p>96 场全量对局，每场包含全场热力图与代表局行动轨迹图。</p>
+            </div>
+            <div class="filters">
+              <input id="matchSearch" type="search" placeholder="搜索学校、赛区或场次" />
+              <select id="matchSide">
+                <option value="">全部</option>
+                <option value="红胜">红方胜</option>
+                <option value="蓝胜">蓝方胜</option>
+              </select>
+            </div>
+          </div>
+          <div id="matchGrid" class="match-grid"></div>
+        </section>
+      </section>
+
+      <section id="opening" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>开局 0-30 秒平均站位</h2>
+              <p>按兵种映射到规则手册官方场地图。</p>
+            </div>
+            <div class="segmented" id="roleTabs">
+              <button class="is-active" data-role="all">总览</button>
+              <button data-role="英雄">英雄</button>
+              <button data-role="工程">工程</button>
+              <button data-role="步兵3">步兵3</button>
+              <button data-role="步兵4">步兵4</button>
+              <button data-role="哨兵">哨兵</button>
+              <button data-role="空中">空中</button>
+            </div>
+          </div>
+          <img id="openingImage" class="wide-figure" src="./assets/opening/opening_rulemap_all_roles_panels.png" alt="开局布置图" />
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>兵种开局均值</h2>
+          </div>
+          <div class="table-wrap">
+            <table id="openingTable">
+              <thead>
+                <tr>
+                  <th>兵种</th>
+                  <th>结果</th>
+                  <th>样本数</th>
+                  <th>平均 x</th>
+                  <th>平均 y</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="data" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>数据与文档</h2>
+              <p>项目内置 CSV、PNG 和 Markdown 文档。</p>
+            </div>
+          </div>
+          <div class="download-grid">
+            <a href="./data/all_qualified_team_tactical_profile_metrics.csv">队伍画像指标 CSV</a>
+            <a href="./data/all_qualified_team_tactical_profile_normalized_scores.csv">画像标准分 CSV</a>
+            <a href="./data/all_handbook_h2h_matches_visuals.csv">96 场比赛图集 CSV</a>
+            <a href="./data/opening_positions_0_30s_by_role.csv">开局兵种站位 CSV</a>
+            <a href="./docs/tactical_profile_explanation.md">战术收益画像说明</a>
+            <a href="./docs/all_requested_matches_report_index.md">逐场报告索引</a>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
