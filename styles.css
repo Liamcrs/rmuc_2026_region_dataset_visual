@@ -197,6 +197,37 @@ button {
   font-size: 12px;
 }
 
+.reason-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.reason-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.reason-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reason-card strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 15px;
+}
+
+.reason-card p {
+  margin-top: 6px;
+}
+
 .profile-legend {
   display: flex;
   align-items: center;
@@ -782,6 +813,7 @@ td:last-child {
   .map-control-layout,
   .simulation-grid,
   .style-cluster-card,
+  .reason-grid,
   .profile-row,
   .rank-row,
   .detail-strip,

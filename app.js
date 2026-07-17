@@ -694,6 +694,83 @@ function renderSharkMatches() {
   });
 }
 
+function avg(rows, key) {
+  if (!rows.length) return 0;
+  return rows.reduce((sum, row) => sum + numberOf(row[key]), 0) / rows.length;
+}
+
+function renderSharkReasonAnalysis() {
+  const games = state.teamGameMetrics.filter((row) => row["学校名"] === SHARK_SCHOOL);
+  const winRows = games.filter((row) => numberOf(row["是否胜方"]) === 1);
+  const lossRows = games.filter((row) => numberOf(row["是否胜方"]) === 0);
+  const metrics = [
+    ["输出伤害", "造成非判罚伤害", "higher", "胜局平均输出越高，越能主动结束交火并保护基地。"],
+    ["受伤害", "受非判罚伤害", "lower", "败局受伤害显著抬升时，说明正面换血或防守轮转被压制。"],
+    ["装配次数", "装配次数", "higher", "胜局装配次数更高，说明工程/科技核心收益更完整。"],
+    ["总发弹", "总发弹", "higher", "胜局发弹量更高，通常代表持续压制和交火参与度更足。"],
+    ["末基地血量", "末基地血量", "higher", "基地保持是胜负结果的直接体现，也反映防守与资源交换质量。"],
+    ["末总金币", "末总金币", "higher", "胜局末金币更高，说明经济循环和资源利用更稳定。"],
+    ["易伤机器人秒", "易伤机器人秒", "context", "该指标需要结合输出看：南工骁鹰胜局易伤更高，偏向主动承压换输出。"],
+    ["伤害每百发", "伤害每百发", "higher", "单发效率不是唯一胜因，低发弹量下该指标可能虚高。"],
+  ].map(([label, key, direction, note]) => {
+    const winAvg = avg(winRows, key);
+    const lossAvg = avg(lossRows, key);
+    const diff = winAvg - lossAvg;
+    const favorable = direction === "lower" ? diff < 0 : direction === "context" ? true : diff > 0;
+    return { label, key, note, winAvg, lossAvg, diff, favorable };
+  });
+  const byKey = Object.fromEntries(metrics.map((row) => [row.key, row]));
+  const causeCards = [
+    {
+      title: "胜局主因",
+      label: "输出建立优势",
+      text: `胜局平均造成伤害 ${fmt.format(byKey["造成非判罚伤害"].winAvg)}，比败局高 ${fmt.format(Math.abs(byKey["造成非判罚伤害"].diff))}。`,
+    },
+    {
+      title: "胜局主因",
+      label: "承伤压力可控",
+      text: `胜局平均受伤害 ${fmt.format(byKey["受非判罚伤害"].winAvg)}，比败局低 ${fmt.format(Math.abs(byKey["受非判罚伤害"].diff))}。`,
+    },
+    {
+      title: "胜局主因",
+      label: "装配更完整",
+      text: `胜局平均装配 ${fmt.format(byKey["装配次数"].winAvg)} 次，败局为 ${fmt.format(byKey["装配次数"].lossAvg)} 次。`,
+    },
+    {
+      title: "败局风险",
+      label: "基地血量被快速压低",
+      text: `败局末基地均值 ${fmt.format(byKey["末基地血量"].lossAvg)}，比胜局低 ${fmt.format(Math.abs(byKey["末基地血量"].diff))}。`,
+    },
+  ];
+  document.querySelector("#sharkReasonSummary").innerHTML = causeCards
+    .map(
+      (card) => `
+        <div class="reason-card">
+          <span>${card.title}</span>
+          <strong>${card.label}</strong>
+          <p>${card.text}</p>
+        </div>
+      `
+    )
+    .join("");
+  const maxDiff = Math.max(...metrics.map((row) => Math.abs(row.diff)), 1);
+  renderRankRows("#sharkReasonChart", metrics, {
+    label: (row) => row.label,
+    sub: (row) => `胜局 ${fmt.format(row.winAvg)} / 败局 ${fmt.format(row.lossAvg)}`,
+    value: (row) => row.diff,
+    max: maxDiff,
+    color: (row) => (row.favorable ? "green" : "negative"),
+    format: (value) => `${value >= 0 ? "+" : ""}${fmt.format(value)}`,
+  });
+  renderDataTable("#sharkReasonTable", metrics, [
+    ["指标", (r) => r.label],
+    ["胜局均值", (r) => fmt.format(r.winAvg)],
+    ["败局均值", (r) => fmt.format(r.lossAvg)],
+    ["胜负差", (r) => `${r.diff >= 0 ? "+" : ""}${fmt.format(r.diff)}`],
+    ["原因解读", (r) => r.note],
+  ]);
+}
+
 function renderSharkGameMetrics() {
   const rows = state.teamGameMetrics
     .filter((row) => row["学校名"] === SHARK_SCHOOL)
@@ -732,6 +809,7 @@ function renderSharkColumn() {
   renderSharkMapControl();
   renderSharkOpening();
   renderSharkMatches();
+  renderSharkReasonAnalysis();
   renderSharkGameMetrics();
 }
 
