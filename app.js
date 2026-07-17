@@ -449,7 +449,7 @@ function simulationRankList(title, rows, metric, colorClass = "") {
               <div class="rank-row compact">
                 <span class="rank-label">
                   <strong>${row["学校名"]}</strong>
-                  <span>${row["队伍名称"]} · ${row["风格分类"] || "未分类"} · 强度 ${fmt.format(numberOf(row["模型强度分"]))}</span>
+                  <span>${row["队伍名称"]} · ${row["风格分类"] || "未分类"} · 上赛季 ${row["上赛季国赛成绩"] || "-"}</span>
                 </span>
                 <span class="rank-track"><span class="rank-fill ${colorClass}" style="width:${width}%"></span></span>
                 <span class="rank-value">${probPct(value)}</span>
@@ -497,22 +497,19 @@ function renderPrediction() {
     .slice()
     .sort((a, b) => numberOf(b[sortKey]) - numberOf(a[sortKey]) || numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]));
   const topChampion = state.tournamentSimulation.slice().sort((a, b) => numberOf(b["全国赛夺冠概率"]) - numberOf(a["全国赛夺冠概率"]))[0];
-  const topRevival = state.tournamentSimulation
-    .filter((row) => row["参赛类别"] === "复活赛")
-    .sort((a, b) => numberOf(b["复活赛晋级全国赛概率"]) - numberOf(a["复活赛晋级全国赛概率"]))[0];
 
   renderDetailCards("#predictionSummary", [
     ["筛选队伍", `${rows.length} 支`],
     ["模拟次数", state.tournamentSimulation[0]?.["模拟次数"] || "-"],
+    ["上赛季权重", "30%"],
     ["争冠最高", topChampion ? `${topChampion["学校名"]} ${probPct(topChampion["全国赛夺冠概率"])}` : "-"],
-    ["复活赛最高", topRevival ? `${topRevival["学校名"]} ${probPct(topRevival["复活赛晋级全国赛概率"])}` : "-"],
   ]);
   const revivalRows = rows
     .filter((row) => row["参赛类别"] === "复活赛")
     .sort((a, b) => numberOf(b["复活赛晋级全国赛概率"]) - numberOf(a["复活赛晋级全国赛概率"]));
   document.querySelector("#predictionSimulationChart").innerHTML = `
     <div class="analysis-note">
-      按参赛手册抽签盒随机分组，并模拟复活赛 3 轮瑞士轮、复活赛双败名额争夺战、全国赛 5 轮瑞士轮、16 进 8/8 进 4 双败淘汰、半决赛和 BO5 决赛。概率来自区域赛指标模型，不代表官方预测。
+      按参赛手册抽签盒随机分组，并模拟复活赛 3 轮瑞士轮、复活赛双败名额争夺战、全国赛 5 轮瑞士轮、16 进 8/8 进 4 双败淘汰、半决赛和 BO5 决赛。模型强度按 70% 当前区域赛指标与 30% 上赛季国赛成绩参考分合成，不代表官方预测。
     </div>
     <div class="simulation-grid">
       ${simulationRankList("复活赛晋级全国赛概率", revivalRows, "复活赛晋级全国赛概率", "green")}
@@ -525,6 +522,8 @@ function renderPrediction() {
     ["队名", (r) => r["队伍名称"]],
     ["类别", (r) => r["参赛类别"]],
     ["风格", (r) => r["风格分类"] || "-"],
+    ["上赛季", (r) => r["上赛季国赛成绩"] || "-"],
+    ["强度", (r) => fmt.format(numberOf(r["模型强度分"]))],
     ["复活赛晋级", (r) => (r["参赛类别"] === "复活赛" ? probPct(r["复活赛晋级全国赛概率"]) : "-")],
     ["十六强", (r) => probPct(r["全国赛十六强概率"])],
     ["八强", (r) => probPct(r["全国赛八强概率"])],
