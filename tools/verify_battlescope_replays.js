@@ -76,6 +76,13 @@ for (const row of indexRows) {
     problems.push(`${file}: no populated frames`);
   }
   for (const side of ["红", "蓝"]) {
+    if (!Array.isArray(replay.economy?.[side]) || !replay.economy[side].length) {
+      problems.push(`${file}: missing ${side} economy series`);
+    } else if (!replay.economy[side].every((point) => Number.isFinite(Number(point.t)) && Number.isFinite(Number(point.total)) && Number.isFinite(Number(point.remaining)) && Number.isFinite(Number(point.spent)))) {
+      problems.push(`${file}: invalid ${side} economy point`);
+    }
+  }
+  for (const side of ["红", "蓝"]) {
     for (const type of ["基地", "前哨站"]) {
       const entity = replay.entities.find((item) => item.side === side && item.type === type);
       if (!entity) {

@@ -492,6 +492,7 @@ function buildReplayModel(replay) {
     frames,
     tracks,
     events: replay.events || [],
+    economy: replay.economy || { 红: [], 蓝: [] },
     eventTypes: [...new Set((replay.events || []).map((event) => event.type).filter(Boolean))],
     duration: numberOf(replay.meta?.duration),
   };
@@ -678,6 +679,87 @@ function renderReplayEventPanel(model, events, time) {
             </section>
           `
         )
+        .join("")}
+    </div>
+  `;
+}
+
+function economyPointAt(points, time) {
+  if (!points?.length) return null;
+  return points.reduce((best, point) => (Math.abs(numberOf(point.t) - time) < Math.abs(numberOf(best.t) - time) ? point : best), points[0]);
+}
+
+function economyPath(points, field, xScale, yScale) {
+  return points
+    .map((point, index) => `${index ? "L" : "M"}${xScale(numberOf(point.t)).toFixed(1)},${yScale(numberOf(point[field])).toFixed(1)}`)
+    .join(" ");
+}
+
+function renderReplayEconomy(model, time) {
+  const container = document.querySelector("#battleReplayEconomy");
+  if (!container) return;
+  if (!model) {
+    container.innerHTML = "";
+    return;
+  }
+  const red = model.economy?.["红"] || [];
+  const blue = model.economy?.["蓝"] || [];
+  const points = [...red, ...blue];
+  if (!points.length) {
+    container.innerHTML = '<div class="replay-economy-empty">暂无经济数据</div>';
+    return;
+  }
+  const width = 760;
+  const height = 152;
+  const pad = { left: 38, right: 16, top: 18, bottom: 24 };
+  const maxTime = Math.max(model.duration, ...points.map((point) => numberOf(point.t)), 1);
+  const maxValue = Math.max(...points.flatMap((point) => [numberOf(point.total), numberOf(point.remaining), numberOf(point.spent)]), 1);
+  const xScale = (value) => pad.left + (numberOf(value) / maxTime) * (width - pad.left - pad.right);
+  const yScale = (value) => height - pad.bottom - (numberOf(value) / maxValue) * (height - pad.top - pad.bottom);
+  const currentX = xScale(Math.max(0, Math.min(maxTime, time)));
+  const series = [
+    ["红", "total", "#ff5268", "总金币"],
+    ["红", "remaining", "#ff9aa8", "剩余"],
+    ["蓝", "total", "#3f8cff", "总金币"],
+    ["蓝", "remaining", "#8fc1ff", "剩余"],
+  ];
+  const current = {
+    红: economyPointAt(red, time),
+    蓝: economyPointAt(blue, time),
+  };
+  container.innerHTML = `
+    <div class="replay-economy-head">
+      <strong>经济曲线</strong>
+      <span>总金币增长 / 剩余金币 / 已使用金币</span>
+    </div>
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="红蓝双方经济曲线">
+      <line class="grid" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}" />
+      <line class="grid" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" />
+      ${[0.25, 0.5, 0.75, 1]
+        .map((ratio) => `<line class="grid soft" x1="${pad.left}" y1="${yScale(maxValue * ratio).toFixed(1)}" x2="${width - pad.right}" y2="${yScale(maxValue * ratio).toFixed(1)}" />`)
+        .join("")}
+      ${series
+        .map(([side, field, color]) => {
+          const sidePoints = model.economy?.[side] || [];
+          return sidePoints.length ? `<path d="${economyPath(sidePoints, field, xScale, yScale)}" fill="none" stroke="${color}" stroke-width="${field === "total" ? 3 : 2}" stroke-linecap="round" stroke-linejoin="round" />` : "";
+        })
+        .join("")}
+      <line class="cursor" x1="${currentX.toFixed(1)}" y1="${pad.top}" x2="${currentX.toFixed(1)}" y2="${height - pad.bottom}" />
+      <text x="${pad.left}" y="${height - 6}">0s</text>
+      <text x="${width - pad.right}" y="${height - 6}" text-anchor="end">${fmt.format(maxTime)}s</text>
+      <text x="4" y="${pad.top + 4}">${fmt.format(maxValue)}</text>
+    </svg>
+    <div class="replay-economy-legend">
+      ${series.map(([side, field, color, label]) => `<span><i style="background:${color}"></i>${side}${label}</span>`).join("")}
+    </div>
+    <div class="replay-economy-now">
+      ${["红", "蓝"]
+        .map((side) => {
+          const point = current[side];
+          return point
+            ? `<span class="${side === "红" ? "red" : "blue"}">${side}方 总${fmt.format(point.total)} / 剩${fmt.format(point.remaining)} / 用${fmt.format(point.spent)}</span>`
+            : "";
+        })
         .join("")}
     </div>
   `;
@@ -1026,6 +1108,7 @@ async function loadReplayMatch(row, gameRow = selectedGameForMatch(row)) {
     state.replayModel = null;
     detail.textContent = "没有匹配的回放";
     renderReplayRosters();
+    renderReplayEconomy(null, 0);
     drawReplayCanvas(null, 0);
     return;
   }
@@ -1055,6 +1138,7 @@ async function loadReplayMatch(row, gameRow = selectedGameForMatch(row)) {
     state.replayModel = null;
     detail.textContent = error.message;
     renderReplayRosters();
+    renderReplayEconomy(null, 0);
   }
 }
 
@@ -1167,6 +1251,7 @@ function renderReplayFrame() {
   time.textContent = `${state.replayTime.toFixed(1)}s / 倒计时 ${Math.max(0, Math.ceil(420 - state.replayTime)).toString().padStart(3, "0")}s`;
   drawReplayCanvas(model, state.replayTime);
   renderReplayRosters();
+  renderReplayEconomy(model, state.replayTime);
   const details = recentReplayEvents(model, state.replayTime, 2.5)
     .sort((a, b) => (a.type === "受击" ? 0 : 1) - (b.type === "受击" ? 0 : 1) || numberOf(b.t) - numberOf(a.t))
     .slice(0, 28);

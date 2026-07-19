@@ -147,9 +147,29 @@ function objectiveHpAt(events, objective, time) {
   return Math.max(0, objective.maxHp - damage);
 }
 
+function buildEconomy(timeseries) {
+  const economy = { 红: new Map(), 蓝: new Map() };
+  timeseries.forEach((row) => {
+    const time = round(row["时刻秒"], 1);
+    if (time < 1 || Math.round(time) % 2 !== 0 || !economy[row["阵营"]]) return;
+    if (economy[row["阵营"]].has(time)) return;
+    const total = round(row["队伍总金币"], 1);
+    const remaining = round(row["队伍剩余金币"], 1);
+    economy[row["阵营"]].set(time, {
+      t: time,
+      total,
+      remaining,
+      spent: Math.max(0, round(total - remaining, 1)),
+    });
+  });
+  return Object.fromEntries(
+    Object.entries(economy).map(([side, points]) => [side, [...points.values()].sort((a, b) => a.t - b.t)])
+  );
+}
+
 function buildReplay(replayId, h2hRow, gameRow) {
   const timeseries = query(`
-    SELECT 时刻秒,robot_id,机器人类型,阵营,学校名,当前血量,最大血量,x,y,枪口朝向,小热量,小热量上限,累计17mm发弹,累计42mm发弹,是否易伤
+    SELECT 时刻秒,robot_id,机器人类型,阵营,学校名,当前血量,最大血量,x,y,枪口朝向,小热量,小热量上限,累计17mm发弹,累计42mm发弹,队伍总金币,队伍剩余金币,是否易伤
     FROM timeseries
     WHERE game_id=${Number(gameRow.game_id)}
       AND 机器人类型 NOT IN ('基地','前哨站')
@@ -251,6 +271,7 @@ function buildReplay(replayId, h2hRow, gameRow) {
     },
     entities,
     frames,
+    economy: buildEconomy(timeseries),
     events,
   };
   fs.writeFileSync(file, `${JSON.stringify(replay)}\n`);
