@@ -741,6 +741,242 @@ td:last-child {
   background: #eef1f5;
 }
 
+.battlescope-tool {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.battlescope-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.battlescope-head h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.battlescope-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.battlescope-controls {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 260px) 44px;
+  align-items: center;
+  gap: 8px;
+}
+
+.battlescope-controls button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.battlescope-controls input {
+  width: 100%;
+}
+
+.battlescope-controls span {
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.battlescope-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 12px;
+}
+
+.battlescope-stage {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 895 / 490;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10131a;
+}
+
+.battlescope-stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+.battlescope-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.battlescope-unit {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 8px 16px rgba(23, 32, 42, 0.26);
+  transform: translate(-50%, -50%);
+}
+
+.battlescope-unit.red {
+  background: rgba(216, 58, 52, 0.9);
+}
+
+.battlescope-unit.blue {
+  background: rgba(39, 107, 216, 0.9);
+}
+
+.battlescope-unit.vulnerable {
+  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.52), 0 8px 16px rgba(23, 32, 42, 0.26);
+}
+
+.battlescope-unit strong {
+  position: relative;
+  z-index: 2;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.battlescope-unit em {
+  display: none;
+}
+
+.battlescope-unit i {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.battlescope-heading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 23px;
+  height: 2px;
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.9);
+  transform-origin: left center;
+}
+
+.battlescope-side {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  max-height: 640px;
+  overflow: auto;
+}
+
+.battlescope-rosters {
+  display: grid;
+  gap: 10px;
+}
+
+.battlescope-roster {
+  display: grid;
+  gap: 7px;
+}
+
+.battlescope-roster h5,
+.battlescope-events h5 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.battlescope-card {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.battlescope-card.red {
+  border-left-color: var(--fire);
+}
+
+.battlescope-card.blue {
+  border-left-color: var(--dart);
+}
+
+.battlescope-card.vulnerable {
+  background: #fff8df;
+}
+
+.battlescope-card strong,
+.battlescope-card span,
+.battlescope-card small {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.battlescope-card span,
+.battlescope-card small {
+  color: var(--muted);
+}
+
+.battlescope-bar,
+.battlescope-heat {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7ebf1;
+}
+
+.battlescope-bar i,
+.battlescope-heat i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.battlescope-bar i {
+  background: linear-gradient(90deg, #77d9a3, var(--assembly));
+}
+
+.battlescope-heat i {
+  background: linear-gradient(90deg, #f7c566, var(--fire));
+}
+
+.battlescope-events {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.battlescope-events p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .damage-source-tool {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
@@ -954,7 +1190,8 @@ td:last-child {
 
 @media (max-width: 1000px) {
   .app-header,
-  .panel-head {
+  .panel-head,
+  .battlescope-head {
     align-items: stretch;
     flex-direction: column;
   }
@@ -963,6 +1200,7 @@ td:last-child {
   .split,
   .match-workspace,
   .map-control-layout,
+  .battlescope-grid,
   .damage-source-tool,
   .simulation-grid,
   .style-cluster-card,
@@ -976,6 +1214,10 @@ td:last-child {
 
   .match-list {
     max-height: 360px;
+  }
+
+  .battlescope-controls {
+    grid-template-columns: auto minmax(0, 1fr) 44px;
   }
 
   main {

@@ -1,7 +1,6 @@
 const state = {
   teams: [],
   matches: [],
-  opening: [],
   assemblyTeams: [],
   mapZones: [],
   mapTopZones: [],
@@ -9,13 +8,17 @@ const state = {
   teamStyles: [],
   tournamentSimulation: [],
   teamGameMetrics: [],
-  openingPositions: [],
   damageSources: [],
   selectedMapSchool: "",
   selectedTeam: "",
   selectedMatch: "",
   matchImageKind: "heat",
   selectedDamagePoint: null,
+  battleScopeCache: {},
+  battleScopeReplay: null,
+  battleScopeLoadingMatch: "",
+  battleScopeTime: 0,
+  battleScopeTimer: null,
 };
 
 const fmt = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
@@ -418,7 +421,188 @@ function renderMatchDetail(row) {
   const file = state.matchImageKind === "heat" ? row["热力图"] : row["轨迹图"];
   image.src = `./assets/h2h_all/${file}`;
   image.alt = `${row["红方学校"]} 对 ${row["蓝方学校"]}${state.matchImageKind === "heat" ? "热力图" : "轨迹图"}`;
+  renderBattleScope(row);
   renderDamageSourceMap(row);
+}
+
+function battleScopeFile(row) {
+  return `./data/battlescope_replays/match_${String(numberOf(row?.["序号"])).padStart(3, "0")}.json`;
+}
+
+function stopBattleScope() {
+  if (state.battleScopeTimer) {
+    clearInterval(state.battleScopeTimer);
+    state.battleScopeTimer = null;
+  }
+  const play = document.querySelector("#battleScopePlay");
+  if (play) play.textContent = "播放";
+}
+
+async function loadBattleScope(row) {
+  const matchId = row?.["序号"] || "";
+  if (!matchId) return null;
+  if (state.battleScopeCache[matchId]) return state.battleScopeCache[matchId];
+  state.battleScopeLoadingMatch = matchId;
+  const response = await fetch(battleScopeFile(row));
+  if (!response.ok) throw new Error("代表局回放数据读取失败");
+  const replay = await response.json();
+  state.battleScopeCache[matchId] = replay;
+  return replay;
+}
+
+function nearestBattleScopeFrame(replay, time) {
+  if (!replay?.frames?.length) return null;
+  return replay.frames.reduce((best, frame) => (Math.abs(frame.t - time) < Math.abs(best.t - time) ? frame : best), replay.frames[0]);
+}
+
+function eventText(event) {
+  const side = event.side ? `${event.side}方` : "";
+  const unit = event.no ? `${event.no}号${event.robot_type || ""}` : event.robot_type || "";
+  const value = event.value ? ` ${fmt.format(Math.abs(numberOf(event.value)))}` : "";
+  const count = numberOf(event.count) > 1 ? ` x${event.count}` : "";
+  return `${event.t}s ${side}${unit} ${event.type}${event.category ? `·${event.category}` : ""}${value}${count}`;
+}
+
+function renderBattleScope(row) {
+  const meta = document.querySelector("#battleScopeMeta");
+  const overlay = document.querySelector("#battleScopeOverlay");
+  const rosters = document.querySelector("#battleScopeRosters");
+  const events = document.querySelector("#battleScopeEvents");
+  const slider = document.querySelector("#battleScopeSlider");
+  if (!meta || !overlay || !rosters || !events || !slider) return;
+  stopBattleScope();
+  if (!row) {
+    state.battleScopeReplay = null;
+    overlay.innerHTML = "";
+    rosters.innerHTML = "";
+    events.innerHTML = "";
+    meta.textContent = "未选择对局";
+    return;
+  }
+  const matchId = row["序号"];
+  const cached = state.battleScopeCache[matchId];
+  if (cached) {
+    state.battleScopeReplay = cached;
+    state.battleScopeTime = Math.min(state.battleScopeTime || 0, numberOf(cached.meta?.duration));
+    renderBattleScopeFrame();
+    return;
+  }
+  state.battleScopeReplay = null;
+  overlay.innerHTML = "";
+  rosters.innerHTML = "";
+  events.innerHTML = "";
+  meta.textContent = "正在读取代表局回放";
+  loadBattleScope(row)
+    .then((replay) => {
+      if (state.selectedMatch !== matchId) return;
+      state.battleScopeReplay = replay;
+      state.battleScopeTime = 0;
+      renderBattleScopeFrame();
+    })
+    .catch((error) => {
+      if (state.selectedMatch !== matchId) return;
+      meta.textContent = error.message;
+    });
+}
+
+function renderBattleScopeFrame() {
+  const replay = state.battleScopeReplay;
+  const meta = document.querySelector("#battleScopeMeta");
+  const overlay = document.querySelector("#battleScopeOverlay");
+  const rosters = document.querySelector("#battleScopeRosters");
+  const events = document.querySelector("#battleScopeEvents");
+  const slider = document.querySelector("#battleScopeSlider");
+  const timeText = document.querySelector("#battleScopeTime");
+  const play = document.querySelector("#battleScopePlay");
+  if (!replay || !meta || !overlay || !rosters || !events || !slider || !timeText || !play) return;
+  const duration = numberOf(replay.meta?.duration);
+  const frame = nearestBattleScopeFrame(replay, state.battleScopeTime);
+  if (!frame) return;
+  slider.max = duration;
+  slider.value = frame.t;
+  timeText.textContent = `${frame.t}s`;
+  meta.textContent = `${replay.meta.title} · ${replay.meta.subtitle}`;
+  const entities = replay.entities || [];
+  const states = frame.s.map((values) => {
+    const entity = entities[values[0]] || {};
+    return {
+      entity,
+      x: values[1],
+      y: values[2],
+      hp: values[3],
+      maxHp: values[4],
+      heat: values[5],
+      heatLimit: values[6],
+      shots17: values[7],
+      shots42: values[8],
+      shotDelta: values[9],
+      vulnerable: values[10],
+      heading: values[11],
+    };
+  });
+  overlay.innerHTML = states
+    .map((item) => {
+      const sideClass = item.entity.side === "红" ? "red" : "blue";
+      const hpRatio = item.maxHp ? Math.max(0, Math.min(1, numberOf(item.hp) / numberOf(item.maxHp))) : 0;
+      return `
+        <div class="battlescope-unit ${sideClass} ${item.vulnerable ? "vulnerable" : ""}" style="left:${fieldLeft(item.x)}%;top:${fieldTop(item.y)}%">
+          <span class="battlescope-heading" style="transform:rotate(${-numberOf(item.heading)}deg)"></span>
+          <strong>${item.entity.no}</strong>
+          <em>${item.entity.type}</em>
+          <i style="height:${hpRatio * 100}%"></i>
+        </div>
+      `;
+    })
+    .join("");
+  rosters.innerHTML = ["红", "蓝"]
+    .map((side) => {
+      const sideRows = states.filter((item) => item.entity.side === side);
+      return `
+        <section class="battlescope-roster">
+          <h5>${side}方</h5>
+          ${sideRows
+            .map((item) => {
+              const hpRatio = item.maxHp ? Math.max(0, Math.min(1, numberOf(item.hp) / numberOf(item.maxHp))) : 0;
+              const heatRatio = item.heatLimit ? Math.max(0, Math.min(1, numberOf(item.heat) / numberOf(item.heatLimit))) : 0;
+              return `
+                <article class="battlescope-card ${side === "红" ? "red" : "blue"} ${item.vulnerable ? "vulnerable" : ""}">
+                  <strong>${item.entity.no}号 ${item.entity.type}</strong>
+                  <span>${fmt.format(numberOf(item.hp))} / ${fmt.format(numberOf(item.maxHp))}</span>
+                  <div class="battlescope-bar"><i style="width:${hpRatio * 100}%"></i></div>
+                  <small>热量 ${fmt.format(numberOf(item.heat))}/${fmt.format(numberOf(item.heatLimit))} · 发弹 ${numberOf(item.shots17) + numberOf(item.shots42)}${item.shotDelta ? ` · +${item.shotDelta}` : ""}</small>
+                  <div class="battlescope-heat"><i style="width:${heatRatio * 100}%"></i></div>
+                </article>
+              `;
+            })
+            .join("")}
+        </section>
+      `;
+    })
+    .join("");
+  const currentEvents = (replay.events || [])
+    .filter((event) => Math.abs(numberOf(event.t) - frame.t) <= 1)
+    .sort((a, b) => (a.type === "受击" ? -1 : 0) - (b.type === "受击" ? -1 : 0))
+    .slice(0, 12);
+  events.innerHTML = `
+    <h5>当前事件</h5>
+    ${currentEvents.length ? currentEvents.map((event) => `<p>${eventText(event)}</p>`).join("") : "<p>当前秒无聚合事件</p>"}
+  `;
+  slider.oninput = () => {
+    state.battleScopeTime = numberOf(slider.value);
+    renderBattleScopeFrame();
+  };
+  play.onclick = () => {
+    if (state.battleScopeTimer) {
+      stopBattleScope();
+      return;
+    }
+    play.textContent = "暂停";
+    state.battleScopeTimer = setInterval(() => {
+      const next = state.battleScopeTime + 2;
+      state.battleScopeTime = next > duration ? 0 : next;
+      renderBattleScopeFrame();
+    }, 300);
+  };
 }
 
 function fieldLeft(x) {
@@ -587,22 +771,6 @@ function renderDamageSourceMap(row) {
         <span>可换一个交火更密集的位置查看。</span>
       </div>
     `;
-}
-
-function renderOpeningTable() {
-  document.querySelector("#openingTable tbody").innerHTML = state.opening
-    .map(
-      (row) => `
-        <tr>
-          <td>${row["机器人类型"]}</td>
-          <td>${row["结果"]}</td>
-          <td>${row["样本数"]}</td>
-          <td>${fmt.format(numberOf(row["平均x"]))}</td>
-          <td>${fmt.format(numberOf(row["平均y"]))}</td>
-        </tr>
-      `
-    )
-    .join("");
 }
 
 function predictionRows() {
@@ -816,30 +984,6 @@ function renderSharkMapControl() {
   ]);
 }
 
-function renderSharkOpening() {
-  const byRole = state.openingPositions
-    .filter((row) => row["学校名"] === SHARK_SCHOOL)
-    .reduce((acc, row) => {
-      const role = row["机器人类型"];
-      acc[role] ||= { role, games: 0, wins: 0, samples: 0, x: 0, y: 0 };
-      acc[role].games += 1;
-      acc[role].wins += numberOf(row["是否胜方"]);
-      acc[role].samples += numberOf(row["samples"]);
-      acc[role].x += numberOf(row["x"]);
-      acc[role].y += numberOf(row["y"]);
-      return acc;
-    }, {});
-  const rows = Object.values(byRole).sort((a, b) => a.role.localeCompare(b.role, "zh-CN"));
-  renderDataTable("#sharkOpening", rows, [
-    ["兵种", (r) => r.role],
-    ["样本局", (r) => fmt.format(r.games)],
-    ["胜局率", (r) => pct(r.games ? r.wins / r.games : 0)],
-    ["平均 x", (r) => fmt.format(r.games ? r.x / r.games : 0)],
-    ["平均 y", (r) => fmt.format(r.games ? r.y / r.games : 0)],
-    ["点位样本", (r) => fmt.format(r.samples)],
-  ]);
-}
-
 function sharkMatchRows() {
   return state.matches
     .filter((row) => row["红方学校"] === SHARK_SCHOOL || row["蓝方学校"] === SHARK_SCHOOL)
@@ -988,7 +1132,6 @@ function renderSharkColumn() {
   renderSharkProfile(team, style, prediction);
   renderSharkPrediction(prediction);
   renderSharkMapControl();
-  renderSharkOpening();
   renderSharkMatches();
   renderSharkReasonAnalysis();
   renderSharkGameMetrics();
@@ -1102,17 +1245,6 @@ function bindInteractions() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view));
   });
-  document.querySelectorAll("#roleTabs button").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.querySelectorAll("#roleTabs button").forEach((item) => item.classList.remove("is-active"));
-      button.classList.add("is-active");
-      const role = button.dataset.role;
-      document.querySelector("#openingImage").src =
-        role === "all"
-          ? "./assets/opening/opening_rulemap_all_roles_panels.png"
-          : `./assets/opening/opening_rulemap_${role}.png`;
-    });
-  });
   document.querySelectorAll("#matchImageTabs button").forEach((button) => {
     button.addEventListener("click", () => {
       document.querySelectorAll("#matchImageTabs button").forEach((item) => item.classList.remove("is-active"));
@@ -1146,7 +1278,6 @@ async function init() {
   if (window.RMUC_DATA) {
     state.teams = window.RMUC_DATA.teams || [];
     state.matches = window.RMUC_DATA.matches || [];
-    state.opening = window.RMUC_DATA.opening || [];
     state.assemblyTeams = window.RMUC_DATA.assemblyTeams || [];
     state.mapZones = window.RMUC_DATA.mapZones || [];
     state.mapTopZones = window.RMUC_DATA.mapTopZones || [];
@@ -1154,13 +1285,11 @@ async function init() {
     state.teamStyles = window.RMUC_DATA.teamStyles || [];
     state.tournamentSimulation = window.RMUC_DATA.tournamentSimulation || [];
     state.teamGameMetrics = window.RMUC_DATA.teamGameMetrics || [];
-    state.openingPositions = window.RMUC_DATA.openingPositions || [];
     state.damageSources = window.RMUC_DATA.damageSources || [];
   } else {
     const [
       teams,
       matches,
-      opening,
       assemblyTeams,
       mapZones,
       mapTopZones,
@@ -1168,12 +1297,10 @@ async function init() {
       teamStyles,
       tournamentSimulation,
       teamGameMetrics,
-      openingPositions,
       damageSources,
     ] = await Promise.all([
       loadCsv("./data/all_qualified_team_tactical_profile_metrics.csv"),
       loadCsv("./data/all_handbook_h2h_matches_visuals.csv"),
-      loadCsv("./data/opening_by_role_summary.csv"),
       loadCsv("./data/analysis_assembly_team_summary.csv"),
       loadCsv("./data/analysis_map_control_zones.csv"),
       loadCsv("./data/analysis_map_control_top_zones.csv"),
@@ -1181,12 +1308,10 @@ async function init() {
       loadCsv("./data/analysis_team_style_clusters.csv"),
       loadCsv("./data/simulation_tournament_probabilities.csv"),
       loadCsv("./data/analysis_team_game_metrics.csv"),
-      loadCsv("./data/opening_positions_0_30s_by_role.csv"),
       loadCsv("./data/analysis_damage_source_points.csv"),
     ]);
     state.teams = teams;
     state.matches = matches;
-    state.opening = opening;
     state.assemblyTeams = assemblyTeams;
     state.mapZones = mapZones;
     state.mapTopZones = mapTopZones;
@@ -1194,7 +1319,6 @@ async function init() {
     state.teamStyles = teamStyles;
     state.tournamentSimulation = tournamentSimulation;
     state.teamGameMetrics = teamGameMetrics;
-    state.openingPositions = openingPositions;
     state.damageSources = damageSources;
   }
   renderMetrics();
@@ -1205,7 +1329,6 @@ async function init() {
   renderPrediction();
   renderSharkColumn();
   renderMatches();
-  renderOpeningTable();
   renderAnalysis();
 }
 
