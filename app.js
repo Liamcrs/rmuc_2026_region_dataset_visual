@@ -14,17 +14,25 @@ const state = {
   selectedMatch: "",
   matchImageKind: "heat",
   selectedDamagePoint: null,
-  battleScopeCache: {},
-  battleScopeReplay: null,
-  battleScopeLoadingMatch: "",
-  battleScopeTime: 0,
-  battleScopeTimer: null,
+  selectedReplayMatch: "",
+  replayCache: {},
+  replayModel: null,
+  replayTime: 0,
+  replayTimer: null,
+  replaySpeed: 1,
+  replayTrail: 20,
+  replayVisibleEntities: new Set(),
+  replayVisibleEvents: new Set(),
+  replayDamageEnabled: true,
+  replaySelectedEntity: "",
 };
 
 const fmt = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 const SHARK_SCHOOL = "哈尔滨工业大学（深圳）";
 const FIELD_WIDTH = 28;
 const FIELD_HEIGHT = 15;
+const replayFieldImage = new Image();
+replayFieldImage.src = "./assets/field/official_field_map.png";
 
 function parseCsv(text) {
   const rows = [];
@@ -143,12 +151,14 @@ function renderDataTable(selector, rows, columns) {
 }
 
 function setView(id) {
+  if (id !== "replay") stopReplayPlayback();
   document.querySelectorAll(".tab").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === id);
   });
   document.querySelectorAll(".view").forEach((view) => {
     view.classList.toggle("is-active", view.id === id);
   });
+  if (id === "replay") window.requestAnimationFrame(renderReplayFrame);
 }
 
 function renderMetrics() {
@@ -407,6 +417,8 @@ function renderMatchDetail(row) {
     document.querySelector("#matchMeta").textContent = "";
     document.querySelector("#matchStats").innerHTML = "";
     image.removeAttribute("src");
+    const replayButton = document.querySelector("#openReplayFromMatch");
+    if (replayButton) replayButton.disabled = true;
     renderDamageSourceMap(null);
     return;
   }
@@ -421,41 +433,102 @@ function renderMatchDetail(row) {
   const file = state.matchImageKind === "heat" ? row["热力图"] : row["轨迹图"];
   image.src = `./assets/h2h_all/${file}`;
   image.alt = `${row["红方学校"]} 对 ${row["蓝方学校"]}${state.matchImageKind === "heat" ? "热力图" : "轨迹图"}`;
-  renderBattleScope(row);
+  const replayButton = document.querySelector("#openReplayFromMatch");
+  if (replayButton) replayButton.disabled = false;
   renderDamageSourceMap(row);
 }
 
-function battleScopeFile(row) {
+function replayFile(row) {
   return `./data/battlescope_replays/match_${String(numberOf(row?.["序号"])).padStart(3, "0")}.json`;
 }
 
-function stopBattleScope() {
-  if (state.battleScopeTimer) {
-    clearInterval(state.battleScopeTimer);
-    state.battleScopeTimer = null;
+function unpackReplayState(replay, compact) {
+  const entity = replay.entities[compact[0]] || {};
+  return {
+    key: `${entity.side}-${entity.no}`,
+    entity,
+    x: numberOf(compact[1]),
+    y: numberOf(compact[2]),
+    hp: numberOf(compact[3]),
+    maxHp: numberOf(compact[4]),
+    heat: numberOf(compact[5]),
+    heatLimit: numberOf(compact[6]),
+    shots17: numberOf(compact[7]),
+    shots42: numberOf(compact[8]),
+    shotDelta: numberOf(compact[9]),
+    vulnerable: Boolean(numberOf(compact[10])),
+    heading: numberOf(compact[11]),
+  };
+}
+
+function buildReplayModel(replay) {
+  const frames = (replay.frames || []).map((frame) => ({
+    t: numberOf(frame.t),
+    states: (frame.s || []).map((compact) => unpackReplayState(replay, compact)),
+  }));
+  const tracks = {};
+  frames.forEach((frame) => {
+    frame.states.forEach((item) => {
+      tracks[item.key] ||= { entity: item.entity, points: [] };
+      tracks[item.key].points.push({
+        t: frame.t,
+        x: item.x,
+        y: item.y,
+        hp: item.hp,
+        maxHp: item.maxHp,
+        heat: item.heat,
+        heatLimit: item.heatLimit,
+        heading: item.heading,
+      });
+    });
+  });
+  return {
+    meta: replay.meta || {},
+    entities: replay.entities || [],
+    frames,
+    tracks,
+    events: replay.events || [],
+    eventTypes: [...new Set((replay.events || []).map((event) => event.type).filter(Boolean))],
+    duration: numberOf(replay.meta?.duration),
+  };
+}
+
+function nearestReplayFrame(model, time) {
+  if (!model?.frames?.length) return null;
+  return model.frames.reduce((best, frame) => (Math.abs(frame.t - time) < Math.abs(best.t - time) ? frame : best), model.frames[0]);
+}
+
+function stateAt(model, time) {
+  const frame = nearestReplayFrame(model, time);
+  return {
+    frame,
+    byEntity: Object.fromEntries((frame?.states || []).map((item) => [item.key, item])),
+  };
+}
+
+function stopReplayPlayback() {
+  if (state.replayTimer) {
+    clearInterval(state.replayTimer);
+    state.replayTimer = null;
   }
-  const play = document.querySelector("#battleScopePlay");
+  const play = document.querySelector("#battleReplayPlay");
   if (play) play.textContent = "播放";
 }
 
-async function loadBattleScope(row) {
-  const matchId = row?.["序号"] || "";
-  if (!matchId) return null;
-  if (state.battleScopeCache[matchId]) return state.battleScopeCache[matchId];
-  state.battleScopeLoadingMatch = matchId;
-  const response = await fetch(battleScopeFile(row));
-  if (!response.ok) throw new Error("代表局回放数据读取失败");
-  const replay = await response.json();
-  state.battleScopeCache[matchId] = replay;
-  return replay;
+function replayCanvasPoint(canvas, x, y) {
+  return [(numberOf(x) / FIELD_WIDTH) * canvas.width, (1 - numberOf(y) / FIELD_HEIGHT) * canvas.height];
 }
 
-function nearestBattleScopeFrame(replay, time) {
-  if (!replay?.frames?.length) return null;
-  return replay.frames.reduce((best, frame) => (Math.abs(frame.t - time) < Math.abs(best.t - time) ? frame : best), replay.frames[0]);
+function replayEntityColor(entity) {
+  return entity.side === "红" ? "#ff4c5d" : "#3f8cff";
 }
 
-function eventText(event) {
+function replayEntitySort(a, b) {
+  const order = ["英雄", "工程", "步兵3", "步兵4", "空中", "哨兵", "基地", "前哨站"];
+  return order.indexOf(a.type) - order.indexOf(b.type) || numberOf(a.no) - numberOf(b.no);
+}
+
+function replayEventText(event) {
   const side = event.side ? `${event.side}方` : "";
   const unit = event.no ? `${event.no}号${event.robot_type || ""}` : event.robot_type || "";
   const value = event.value ? ` ${fmt.format(Math.abs(numberOf(event.value)))}` : "";
@@ -463,146 +536,418 @@ function eventText(event) {
   return `${event.t}s ${side}${unit} ${event.type}${event.category ? `·${event.category}` : ""}${value}${count}`;
 }
 
-function renderBattleScope(row) {
-  const meta = document.querySelector("#battleScopeMeta");
-  const overlay = document.querySelector("#battleScopeOverlay");
-  const rosters = document.querySelector("#battleScopeRosters");
-  const events = document.querySelector("#battleScopeEvents");
-  const slider = document.querySelector("#battleScopeSlider");
-  if (!meta || !overlay || !rosters || !events || !slider) return;
-  stopBattleScope();
+function recentReplayEvents(model, time, windowSeconds = 1.5) {
+  return (model?.events || []).filter((event) => {
+    if (!state.replayVisibleEvents.has(event.type)) return false;
+    const age = time - numberOf(event.t);
+    return age >= 0 && age <= windowSeconds;
+  });
+}
+
+function inferReplayAttack(model, hitEvent, frameState) {
+  if (hitEvent.type !== "受击" || !hitEvent.robot_id) return null;
+  const victim = Object.values(frameState.byEntity).find(
+    (item) => item.entity.side === hitEvent.side && numberOf(item.entity.id) === numberOf(hitEvent.robot_id)
+  );
+  if (!victim) return null;
+  const opponents = Object.values(frameState.byEntity)
+    .filter((item) => item.entity.side && item.entity.side !== hitEvent.side)
+    .filter((item) => state.replayVisibleEntities.has(item.key));
+  if (!opponents.length) return null;
+  const source = opponents
+    .map((item) => ({ item, distance: Math.hypot(item.x - victim.x, item.y - victim.y) }))
+    .sort((a, b) => a.distance - b.distance)[0]?.item;
+  if (!source) return null;
+  return { source, victim, event: hitEvent };
+}
+
+function resizeReplayCanvas() {
+  const canvas = document.querySelector("#battleReplayCanvas");
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(320, Math.round(rect.width * dpr));
+  const height = Math.max(170, Math.round(rect.height * dpr));
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+}
+
+function drawReplayRobot(ctx, canvas, item, recentHits) {
+  if (!state.replayVisibleEntities.has(item.key)) return;
+  const [x, y] = replayCanvasPoint(canvas, item.x, item.y);
+  const dpr = window.devicePixelRatio || 1;
+  const color = replayEntityColor(item.entity);
+  const radius = 12 * dpr;
+  const hpRatio = item.maxHp ? Math.max(0, Math.min(1, item.hp / item.maxHp)) : 0;
+  const heatRatio = item.heatLimit ? Math.max(0, Math.min(1, item.heat / item.heatLimit)) : 0;
+  const isHit = recentHits.some((event) => event.side === item.entity.side && numberOf(event.robot_id) === numberOf(item.entity.id));
+
+  ctx.save();
+  if (item.vulnerable || isHit || state.replaySelectedEntity === item.key) {
+    ctx.shadowColor = item.vulnerable || isHit ? "#ff5268" : "#ffffff";
+    ctx.shadowBlur = (item.vulnerable ? 18 : 12) * dpr;
+  }
+  ctx.fillStyle = "rgba(12, 15, 21, .92)";
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, radius - 1 * dpr, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.86;
+  ctx.fillRect(x - radius, y + radius - radius * 2 * hpRatio, radius * 2, radius * 2 * hpRatio);
+  ctx.restore();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.2 * dpr;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255, 255, 255, .24)";
+  ctx.lineWidth = 2.3 * dpr;
+  ctx.beginPath();
+  ctx.arc(x, y, radius + 5 * dpr, 0, Math.PI * 2);
+  ctx.stroke();
+  if (heatRatio > 0) {
+    ctx.strokeStyle = heatRatio > 0.85 ? "#ffcf5a" : "#78f0c1";
+    ctx.lineWidth = 3 * dpr;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(x, y, radius + 5 * dpr, -Math.PI / 2, -Math.PI / 2 - Math.PI * 2 * heatRatio, true);
+    ctx.stroke();
+  }
+  if (Number.isFinite(item.heading)) {
+    const rad = (-item.heading * Math.PI) / 180;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(rad) * radius * 0.45, y + Math.sin(rad) * radius * 0.45);
+    ctx.lineTo(x + Math.cos(rad) * radius * 1.65, y + Math.sin(rad) * radius * 1.65);
+    ctx.stroke();
+  }
+  ctx.font = `700 ${12 * dpr}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 3 * dpr;
+  ctx.strokeStyle = "rgba(0, 0, 0, .82)";
+  ctx.strokeText(String(item.entity.no), x, y);
+  ctx.fillStyle = "#fff";
+  ctx.fillText(String(item.entity.no), x, y);
+  ctx.restore();
+}
+
+function drawReplayCanvas(model, time) {
+  const canvas = document.querySelector("#battleReplayCanvas");
+  if (!canvas) return;
+  resizeReplayCanvas();
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!model) {
+    ctx.fillStyle = "#10131a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+  if (replayFieldImage.complete) {
+    ctx.globalAlpha = 0.92;
+    ctx.drawImage(replayFieldImage, 0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = "#111827";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  Object.values(model.tracks).forEach((track) => {
+    const key = `${track.entity.side}-${track.entity.no}`;
+    if (!state.replayVisibleEntities.has(key)) return;
+    const points = track.points.filter((point) => point.t <= time && point.t >= time - state.replayTrail);
+    if (points.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = replayEntityColor(track.entity);
+    ctx.globalAlpha = 0.78;
+    ctx.lineWidth = 2 * dpr;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      const [x, y] = replayCanvasPoint(canvas, point.x, point.y);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  const frameState = stateAt(model, time);
+  const currentEvents = recentReplayEvents(model, time, 1.5);
+  const hitEvents = currentEvents.filter((event) => event.type === "受击");
+
+  if (state.replayDamageEnabled) {
+    hitEvents.forEach((event) => {
+      const inferred = inferReplayAttack(model, event, frameState);
+      if (!inferred) return;
+      const [sx, sy] = replayCanvasPoint(canvas, inferred.source.x, inferred.source.y);
+      const [vx, vy] = replayCanvasPoint(canvas, inferred.victim.x, inferred.victim.y);
+      const age = Math.max(0, time - numberOf(event.t));
+      const alpha = Math.max(0.18, 1 - age / 1.5);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = event.category === "42mm" ? "#ffcf5a" : "#78f0c1";
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = (event.category === "42mm" ? 3.4 : 2.4) * dpr;
+      ctx.setLineDash(event.category === "42mm" ? [] : [7 * dpr, 5 * dpr]);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(vx, vy);
+      ctx.stroke();
+      const angle = Math.atan2(vy - sy, vx - sx);
+      const head = 9 * dpr;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(vx, vy);
+      ctx.lineTo(vx - Math.cos(angle - Math.PI / 6) * head, vy - Math.sin(angle - Math.PI / 6) * head);
+      ctx.lineTo(vx - Math.cos(angle + Math.PI / 6) * head, vy - Math.sin(angle + Math.PI / 6) * head);
+      ctx.closePath();
+      ctx.fill();
+      const value = Math.abs(numberOf(event.value));
+      if (value) {
+        ctx.font = `800 ${16 * dpr}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.lineWidth = 4 * dpr;
+        ctx.strokeStyle = "rgba(20, 0, 0, .9)";
+        ctx.strokeText(`-${fmt.format(value)}`, vx, vy - (24 + age * 16) * dpr);
+        ctx.fillStyle = event.category === "42mm" ? "#ffcf5a" : "#ff5268";
+        ctx.fillText(`-${fmt.format(value)}`, vx, vy - (24 + age * 16) * dpr);
+      }
+      ctx.restore();
+    });
+  }
+
+  currentEvents
+    .filter((event) => event.type !== "受击")
+    .slice(0, 16)
+    .forEach((event, index) => {
+      const item = Object.values(frameState.byEntity).find(
+        (candidate) => candidate.entity.side === event.side && numberOf(candidate.entity.id) === numberOf(event.robot_id)
+      );
+      if (!item || !state.replayVisibleEntities.has(item.key)) return;
+      const [x, y] = replayCanvasPoint(canvas, item.x, item.y);
+      const radius = (16 + (index % 4) * 4) * dpr;
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = event.type === "发弹" ? "#78f0c1" : "#b891ff";
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    });
+
+  (frameState.frame?.states || []).forEach((item) => drawReplayRobot(ctx, canvas, item, hitEvents));
+}
+
+function replayRows() {
+  const search = document.querySelector("#battleReplaySearch")?.value.trim().toLowerCase() || "";
+  const side = document.querySelector("#battleReplaySide")?.value || "";
+  return state.matches.filter((row) => {
+    const haystack = `${row["赛区"]} ${row["场次号"]} ${row["红方学校"]} ${row["蓝方学校"]} ${row["胜方学校"]}`.toLowerCase();
+    const winnerSide =
+      numberOf(row["红胜局"]) > numberOf(row["蓝胜局"])
+        ? "红胜"
+        : numberOf(row["蓝胜局"]) > numberOf(row["红胜局"])
+          ? "蓝胜"
+          : "";
+    return haystack.includes(search) && (!side || winnerSide === side);
+  });
+}
+
+function renderReplayMatches() {
+  const list = document.querySelector("#battleReplayList");
+  if (!list) return;
+  const rows = replayRows();
+  if (!rows.some((row) => row["序号"] === state.selectedReplayMatch)) {
+    state.selectedReplayMatch = rows[0]?.["序号"] || "";
+  }
+  list.innerHTML = rows.length
+    ? rows
+        .map(
+          (row) => `
+            <button class="replay-match-item ${row["序号"] === state.selectedReplayMatch ? "is-active" : ""}" data-match="${row["序号"]}">
+              <span class="replay-match-title">${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}</span>
+              <span class="replay-match-meta">${row["赛区"]} 第${row["场次号"]}场 · 代表局第${row["代表局号"]}局 · 胜方 ${row["胜方学校"]}</span>
+            </button>
+          `
+        )
+        .join("")
+    : '<div class="empty">没有匹配的回放</div>';
+  list.querySelectorAll(".replay-match-item").forEach((button) => {
+    button.addEventListener("click", () => {
+      stopReplayPlayback();
+      state.selectedReplayMatch = button.dataset.match;
+      renderReplayMatches();
+      loadReplayMatch(rows.find((row) => row["序号"] === state.selectedReplayMatch));
+    });
+  });
+  loadReplayMatch(rows.find((row) => row["序号"] === state.selectedReplayMatch));
+}
+
+async function loadReplayMatch(row) {
+  const detail = document.querySelector("#battleReplayDetail");
+  if (!detail) return;
   if (!row) {
-    state.battleScopeReplay = null;
-    overlay.innerHTML = "";
-    rosters.innerHTML = "";
-    events.innerHTML = "";
-    meta.textContent = "未选择对局";
+    state.replayModel = null;
+    detail.textContent = "没有匹配的回放";
+    renderReplayRosters();
+    drawReplayCanvas(null, 0);
     return;
   }
   const matchId = row["序号"];
-  const cached = state.battleScopeCache[matchId];
-  if (cached) {
-    state.battleScopeReplay = cached;
-    state.battleScopeTime = Math.min(state.battleScopeTime || 0, numberOf(cached.meta?.duration));
-    renderBattleScopeFrame();
+  if (state.replayCache[matchId]) {
+    const model = state.replayCache[matchId];
+    if (state.replayModel !== model) state.replayTime = model.frames[0]?.t || 0;
+    state.replayModel = model;
+    renderReplayFilters();
+    renderReplayFrame();
     return;
   }
-  state.battleScopeReplay = null;
-  overlay.innerHTML = "";
-  rosters.innerHTML = "";
-  events.innerHTML = "";
-  meta.textContent = "正在读取代表局回放";
-  loadBattleScope(row)
-    .then((replay) => {
-      if (state.selectedMatch !== matchId) return;
-      state.battleScopeReplay = replay;
-      state.battleScopeTime = 0;
-      renderBattleScopeFrame();
-    })
-    .catch((error) => {
-      if (state.selectedMatch !== matchId) return;
-      meta.textContent = error.message;
-    });
+  detail.textContent = "正在读取回放数据";
+  try {
+    const response = await fetch(replayFile(row));
+    if (!response.ok) throw new Error("该场暂无回放数据");
+    const model = buildReplayModel(await response.json());
+    state.replayCache[matchId] = model;
+    state.replayModel = model;
+    state.replayTime = model.frames[0]?.t || 0;
+    state.replayVisibleEntities = new Set(model.entities.map((entity) => `${entity.side}-${entity.no}`));
+    state.replayVisibleEvents = new Set(model.eventTypes);
+    state.replaySelectedEntity = "";
+    renderReplayFilters();
+    renderReplayFrame();
+  } catch (error) {
+    state.replayModel = null;
+    detail.textContent = error.message;
+    renderReplayRosters();
+  }
 }
 
-function renderBattleScopeFrame() {
-  const replay = state.battleScopeReplay;
-  const meta = document.querySelector("#battleScopeMeta");
-  const overlay = document.querySelector("#battleScopeOverlay");
-  const rosters = document.querySelector("#battleScopeRosters");
-  const events = document.querySelector("#battleScopeEvents");
-  const slider = document.querySelector("#battleScopeSlider");
-  const timeText = document.querySelector("#battleScopeTime");
-  const play = document.querySelector("#battleScopePlay");
-  if (!replay || !meta || !overlay || !rosters || !events || !slider || !timeText || !play) return;
-  const duration = numberOf(replay.meta?.duration);
-  const frame = nearestBattleScopeFrame(replay, state.battleScopeTime);
-  if (!frame) return;
-  slider.max = duration;
-  slider.value = frame.t;
-  timeText.textContent = `${frame.t}s`;
-  meta.textContent = `${replay.meta.title} · ${replay.meta.subtitle}`;
-  const entities = replay.entities || [];
-  const states = frame.s.map((values) => {
-    const entity = entities[values[0]] || {};
-    return {
-      entity,
-      x: values[1],
-      y: values[2],
-      hp: values[3],
-      maxHp: values[4],
-      heat: values[5],
-      heatLimit: values[6],
-      shots17: values[7],
-      shots42: values[8],
-      shotDelta: values[9],
-      vulnerable: values[10],
-      heading: values[11],
-    };
-  });
-  overlay.innerHTML = states
-    .map((item) => {
-      const sideClass = item.entity.side === "红" ? "red" : "blue";
-      const hpRatio = item.maxHp ? Math.max(0, Math.min(1, numberOf(item.hp) / numberOf(item.maxHp))) : 0;
-      return `
-        <div class="battlescope-unit ${sideClass} ${item.vulnerable ? "vulnerable" : ""}" style="left:${fieldLeft(item.x)}%;top:${fieldTop(item.y)}%">
-          <span class="battlescope-heading" style="transform:rotate(${-numberOf(item.heading)}deg)"></span>
-          <strong>${item.entity.no}</strong>
-          <em>${item.entity.type}</em>
-          <i style="height:${hpRatio * 100}%"></i>
-        </div>
-      `;
-    })
-    .join("");
-  rosters.innerHTML = ["红", "蓝"]
-    .map((side) => {
-      const sideRows = states.filter((item) => item.entity.side === side);
-      return `
-        <section class="battlescope-roster">
-          <h5>${side}方</h5>
-          ${sideRows
-            .map((item) => {
-              const hpRatio = item.maxHp ? Math.max(0, Math.min(1, numberOf(item.hp) / numberOf(item.maxHp))) : 0;
-              const heatRatio = item.heatLimit ? Math.max(0, Math.min(1, numberOf(item.heat) / numberOf(item.heatLimit))) : 0;
-              return `
-                <article class="battlescope-card ${side === "红" ? "red" : "blue"} ${item.vulnerable ? "vulnerable" : ""}">
-                  <strong>${item.entity.no}号 ${item.entity.type}</strong>
-                  <span>${fmt.format(numberOf(item.hp))} / ${fmt.format(numberOf(item.maxHp))}</span>
-                  <div class="battlescope-bar"><i style="width:${hpRatio * 100}%"></i></div>
-                  <small>热量 ${fmt.format(numberOf(item.heat))}/${fmt.format(numberOf(item.heatLimit))} · 发弹 ${numberOf(item.shots17) + numberOf(item.shots42)}${item.shotDelta ? ` · +${item.shotDelta}` : ""}</small>
-                  <div class="battlescope-heat"><i style="width:${heatRatio * 100}%"></i></div>
-                </article>
-              `;
-            })
-            .join("")}
-        </section>
-      `;
-    })
-    .join("");
-  const currentEvents = (replay.events || [])
-    .filter((event) => Math.abs(numberOf(event.t) - frame.t) <= 1)
-    .sort((a, b) => (a.type === "受击" ? -1 : 0) - (b.type === "受击" ? -1 : 0))
-    .slice(0, 12);
-  events.innerHTML = `
-    <h5>当前事件</h5>
-    ${currentEvents.length ? currentEvents.map((event) => `<p>${eventText(event)}</p>`).join("") : "<p>当前秒无聚合事件</p>"}
+function renderReplayFilters() {
+  const model = state.replayModel;
+  const trackFilters = document.querySelector("#battleReplayTrackFilters");
+  const eventFilters = document.querySelector("#battleReplayEventFilters");
+  if (!trackFilters || !eventFilters || !model) return;
+  const roles = [...new Set(model.entities.map((entity) => entity.type).filter(Boolean))].sort(
+    (a, b) => replayEntitySort({ type: a, no: 0 }, { type: b, no: 0 })
+  );
+  trackFilters.innerHTML = `
+    <span>机器人</span>
+    ${roles
+      .map((role) => {
+        const roleKeys = model.entities.filter((entity) => entity.type === role).map((entity) => `${entity.side}-${entity.no}`);
+        const checked = roleKeys.some((key) => state.replayVisibleEntities.has(key));
+        return `<label><input type="checkbox" data-role="${role}" ${checked ? "checked" : ""} /> ${role}</label>`;
+      })
+      .join("")}
   `;
-  slider.oninput = () => {
-    state.battleScopeTime = numberOf(slider.value);
-    renderBattleScopeFrame();
+  eventFilters.innerHTML = `
+    <span>事件</span>
+    ${model.eventTypes
+      .map((type) => `<label><input type="checkbox" data-event="${type}" ${state.replayVisibleEvents.has(type) ? "checked" : ""} /> ${type}</label>`)
+      .join("")}
+  `;
+  trackFilters.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("change", () => {
+      model.entities
+        .filter((entity) => entity.type === input.dataset.role)
+        .forEach((entity) => {
+          const key = `${entity.side}-${entity.no}`;
+          if (input.checked) state.replayVisibleEntities.add(key);
+          else state.replayVisibleEntities.delete(key);
+        });
+      renderReplayFrame();
+    });
+  });
+  eventFilters.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked) state.replayVisibleEvents.add(input.dataset.event);
+      else state.replayVisibleEvents.delete(input.dataset.event);
+      renderReplayFrame();
+    });
+  });
+}
+
+function renderReplayRosters() {
+  const red = document.querySelector("#battleReplayRedRoster");
+  const blue = document.querySelector("#battleReplayBlueRoster");
+  if (!red || !blue) return;
+  const model = state.replayModel;
+  if (!model) {
+    red.innerHTML = "";
+    blue.innerHTML = "";
+    return;
+  }
+  const frameState = stateAt(model, state.replayTime);
+  const currentEvents = recentReplayEvents(model, state.replayTime, 3);
+  const markup = (side) => {
+    const states = Object.values(frameState.byEntity)
+      .filter((item) => item.entity.side === side)
+      .sort((a, b) => replayEntitySort(a.entity, b.entity));
+    return `
+      <div class="replay-roster-title"><strong>${side}方</strong><span>${states[0]?.entity.school || ""}</span></div>
+      ${states
+        .map((item) => {
+          const hpRatio = item.maxHp ? Math.max(0, Math.min(1, item.hp / item.maxHp)) : 0;
+          const heatRatio = item.heatLimit ? Math.max(0, Math.min(1, item.heat / item.heatLimit)) : 0;
+          const key = item.key;
+          const recent = currentEvents
+            .filter((event) => event.side === side && numberOf(event.robot_id) === numberOf(item.entity.id))
+            .map((event) => event.type)
+            .slice(0, 2);
+          return `
+            <article class="replay-unit-card ${state.replayVisibleEntities.has(key) ? "" : "is-hidden"} ${state.replaySelectedEntity === key ? "is-selected" : ""}" data-entity="${key}">
+              <div class="replay-unit-head"><span><i>${item.entity.no}</i>${item.entity.type}</span><strong>${fmt.format(item.hp)} / ${fmt.format(item.maxHp)}</strong></div>
+              <div class="replay-hp"><span style="width:${hpRatio * 100}%"></span></div>
+              <div class="replay-unit-stats"><span>热量 ${fmt.format(item.heat)}/${fmt.format(item.heatLimit)}</span><span>发弹 ${numberOf(item.shots17) + numberOf(item.shots42)}${item.shotDelta ? ` +${item.shotDelta}` : ""}</span></div>
+              <div class="replay-heat"><span style="width:${heatRatio * 100}%"></span></div>
+              <small>${[item.vulnerable ? "易伤" : "", ...recent].filter(Boolean).join(" · ") || "稳定"}</small>
+            </article>
+          `;
+        })
+        .join("")}
+    `;
   };
-  play.onclick = () => {
-    if (state.battleScopeTimer) {
-      stopBattleScope();
-      return;
-    }
-    play.textContent = "暂停";
-    state.battleScopeTimer = setInterval(() => {
-      const next = state.battleScopeTime + 2;
-      state.battleScopeTime = next > duration ? 0 : next;
-      renderBattleScopeFrame();
-    }, 300);
-  };
+  red.innerHTML = markup("红");
+  blue.innerHTML = markup("蓝");
+  document.querySelectorAll(".replay-unit-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const key = card.dataset.entity;
+      state.replaySelectedEntity = state.replaySelectedEntity === key ? "" : key;
+      renderReplayFrame();
+    });
+  });
+}
+
+function renderReplayFrame() {
+  const model = state.replayModel;
+  const slider = document.querySelector("#battleReplaySlider");
+  const time = document.querySelector("#battleReplayTime");
+  const detail = document.querySelector("#battleReplayDetail");
+  if (!model || !slider || !time || !detail) return;
+  const frame = nearestReplayFrame(model, state.replayTime);
+  if (!frame) return;
+  state.replayTime = frame.t;
+  slider.max = model.duration;
+  slider.value = frame.t;
+  time.textContent = `${frame.t}s / 倒计时 ${Math.max(0, Math.ceil(420 - frame.t)).toString().padStart(3, "0")}s`;
+  drawReplayCanvas(model, frame.t);
+  renderReplayRosters();
+  const details = recentReplayEvents(model, frame.t, 2.5)
+    .sort((a, b) => (a.type === "受击" ? -1 : 0) - (b.type === "受击" ? -1 : 0))
+    .slice(0, 8)
+    .map(replayEventText);
+  detail.textContent = details.length ? details.join("；") : `${model.meta.title || "代表局"} · ${frame.t}s 无已选事件`;
 }
 
 function fieldLeft(x) {
@@ -1265,6 +1610,49 @@ function bindInteractions() {
   ["predictionSearch", "predictionCategory", "predictionSort"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderPrediction);
   });
+  ["battleReplaySearch", "battleReplaySide"].forEach((id) => {
+    document.querySelector(`#${id}`).addEventListener("input", () => {
+      stopReplayPlayback();
+      renderReplayMatches();
+    });
+  });
+  document.querySelector("#battleReplaySlider").addEventListener("input", (event) => {
+    stopReplayPlayback();
+    state.replayTime = numberOf(event.target.value);
+    renderReplayFrame();
+  });
+  document.querySelector("#battleReplaySpeed").addEventListener("input", (event) => {
+    state.replaySpeed = numberOf(event.target.value) || 1;
+  });
+  document.querySelector("#battleReplayTrail").addEventListener("input", (event) => {
+    state.replayTrail = Math.max(4, Math.min(90, numberOf(event.target.value) || 20));
+    renderReplayFrame();
+  });
+  document.querySelector("#battleReplayDamageToggle").addEventListener("input", (event) => {
+    state.replayDamageEnabled = event.target.checked;
+    renderReplayFrame();
+  });
+  document.querySelector("#battleReplayPlay").addEventListener("click", () => {
+    if (!state.replayModel) return;
+    if (state.replayTimer) {
+      stopReplayPlayback();
+      return;
+    }
+    document.querySelector("#battleReplayPlay").textContent = "暂停";
+    state.replayTimer = setInterval(() => {
+      const next = state.replayTime + state.replaySpeed;
+      state.replayTime = next > state.replayModel.duration ? 0 : next;
+      renderReplayFrame();
+    }, 250);
+  });
+  document.querySelector("#openReplayFromMatch").addEventListener("click", () => {
+    stopReplayPlayback();
+    state.selectedReplayMatch = state.selectedMatch;
+    setView("replay");
+    renderReplayMatches();
+  });
+  replayFieldImage.addEventListener("load", renderReplayFrame);
+  window.addEventListener("resize", renderReplayFrame);
   ["analysisTopic", "analysisSearch"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderAnalysis);
   });
@@ -1327,6 +1715,7 @@ async function init() {
   renderProfileChart();
   renderTeamTable();
   renderPrediction();
+  renderReplayMatches();
   renderSharkColumn();
   renderMatches();
   renderAnalysis();

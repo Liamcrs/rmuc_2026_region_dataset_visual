@@ -16,6 +16,7 @@
         <button class="tab is-active" data-view="overview">总览</button>
         <button class="tab" data-view="teams">队伍画像</button>
         <button class="tab" data-view="prediction">比赛预测</button>
+        <button class="tab" data-view="replay">战术回放</button>
         <button class="tab" data-view="shark">南工骁鹰</button>
         <button class="tab" data-view="analysis">专题分析</button>
         <button class="tab" data-view="matches">对局地图</button>
@@ -189,6 +190,59 @@
         </section>
       </section>
 
+      <section id="replay" class="view">
+        <section class="panel replay-shell">
+          <div class="panel-head">
+            <div>
+              <h2>战术回放</h2>
+              <p>静态 BattleScope：选择已有 96 场代表局，查看机器人轨迹、状态、受击与事件。</p>
+            </div>
+            <div class="filters">
+              <input id="battleReplaySearch" type="search" placeholder="搜索学校、赛区或场次" />
+              <select id="battleReplaySide">
+                <option value="">全部</option>
+                <option value="红胜">红方胜</option>
+                <option value="蓝胜">蓝方胜</option>
+              </select>
+            </div>
+          </div>
+          <div class="replay-layout">
+            <aside id="battleReplayList" class="replay-match-list" aria-label="战术回放比赛列表"></aside>
+            <section class="replay-workspace">
+              <div class="replay-controls" aria-label="战术回放控制">
+                <button id="battleReplayPlay" type="button">播放</button>
+                <label>倍速
+                  <select id="battleReplaySpeed">
+                    <option value="1">1x</option>
+                    <option value="2">2x</option>
+                    <option value="3">3x</option>
+                    <option value="5">5x</option>
+                  </select>
+                </label>
+                <label class="replay-time-label">时间 <output id="battleReplayTime">0s</output></label>
+                <input id="battleReplaySlider" type="range" min="0" max="0" step="1" value="0" aria-label="战术回放时间轴" />
+                <label>尾迹
+                  <input id="battleReplayTrail" type="number" min="4" max="90" step="1" value="20" />
+                </label>
+                <label class="replay-check"><input id="battleReplayDamageToggle" type="checkbox" checked /> 伤害</label>
+              </div>
+              <div class="replay-filters">
+                <div id="battleReplayTrackFilters" class="replay-filter-row" aria-label="机器人筛选"></div>
+                <div id="battleReplayEventFilters" class="replay-filter-row" aria-label="事件筛选"></div>
+              </div>
+              <div class="replay-battle-grid">
+                <aside id="battleReplayRedRoster" class="replay-roster red" aria-label="红方机器人状态"></aside>
+                <div class="replay-center">
+                  <div class="replay-stage"><canvas id="battleReplayCanvas" aria-label="战术回放场地图"></canvas></div>
+                  <div id="battleReplayDetail" class="replay-detail">选择一场比赛查看回放</div>
+                </div>
+                <aside id="battleReplayBlueRoster" class="replay-roster blue" aria-label="蓝方机器人状态"></aside>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
       <section id="shark" class="view">
         <section class="panel shark-hero">
           <div class="panel-head">
@@ -313,36 +367,16 @@
                   <h3 id="matchTitle">选择对局</h3>
                   <p id="matchMeta"></p>
                 </div>
-                <div class="segmented" id="matchImageTabs">
-                  <button class="is-active" data-kind="heat">热力图</button>
-                  <button data-kind="path">轨迹图</button>
+                <div class="match-actions">
+                  <button id="openReplayFromMatch" class="ghost-button" type="button">打开战术回放</button>
+                  <div class="segmented" id="matchImageTabs">
+                    <button class="is-active" data-kind="heat">热力图</button>
+                    <button data-kind="path">轨迹图</button>
+                  </div>
                 </div>
               </div>
               <div id="matchStats" class="detail-strip"></div>
               <img id="matchDetailImage" class="match-detail-image" alt="对局可视化" />
-              <div class="battlescope-tool">
-                <div class="battlescope-head">
-                  <div>
-                    <h4>BattleScope 代表局回放</h4>
-                    <p id="battleScopeMeta">正在准备回放</p>
-                  </div>
-                  <div class="battlescope-controls">
-                    <button id="battleScopePlay" type="button">播放</button>
-                    <input id="battleScopeSlider" type="range" min="0" max="0" step="2" value="0" aria-label="BattleScope 时间轴" />
-                    <span id="battleScopeTime">0s</span>
-                  </div>
-                </div>
-                <div class="battlescope-grid">
-                  <div id="battleScopeStage" class="battlescope-stage">
-                    <img src="./assets/field/official_field_map.png" alt="官方场地图" />
-                    <div id="battleScopeOverlay" class="battlescope-overlay"></div>
-                  </div>
-                  <aside class="battlescope-side">
-                    <div id="battleScopeRosters" class="battlescope-rosters"></div>
-                    <div id="battleScopeEvents" class="battlescope-events"></div>
-                  </aside>
-                </div>
-              </div>
               <div class="damage-source-tool">
                 <div id="damageSourceMap" class="damage-source-map" aria-label="受伤来源交互地图">
                   <img src="./assets/field/official_field_map.png" alt="官方场地图" />
