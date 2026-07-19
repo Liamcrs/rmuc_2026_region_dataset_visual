@@ -741,6 +741,158 @@ td:last-child {
   background: #eef1f5;
 }
 
+.damage-source-tool {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.damage-source-map {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 895 / 490;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10131a;
+  cursor: crosshair;
+}
+
+.damage-source-map img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+.damage-source-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.damage-source-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.damage-source-lines line {
+  stroke: rgba(23, 32, 42, 0.44);
+  stroke-width: 0.42;
+  stroke-dasharray: 1.4 1.2;
+}
+
+.damage-click-point,
+.damage-source-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.damage-click-point {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #121826;
+  border-radius: 50%;
+  background: #ffd166;
+  box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.45);
+}
+
+.damage-source-marker {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  box-shadow: 0 8px 18px rgba(23, 32, 42, 0.28);
+  cursor: default;
+}
+
+.damage-source-marker.red {
+  background: rgba(216, 58, 52, 0.9);
+}
+
+.damage-source-marker.blue {
+  background: rgba(39, 107, 216, 0.9);
+}
+
+.damage-source-marker strong {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.damage-source-marker span {
+  display: none;
+}
+
+.damage-source-side {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.damage-source-side h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.damage-source-side p {
+  margin: 4px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.damage-source-list {
+  display: grid;
+  gap: 8px;
+  max-height: 440px;
+  overflow: auto;
+}
+
+.damage-source-card,
+.damage-source-empty {
+  display: grid;
+  gap: 2px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.damage-source-card {
+  border-left: 4px solid var(--accent);
+}
+
+.damage-source-card.red {
+  border-left-color: var(--fire);
+}
+
+.damage-source-card.blue {
+  border-left-color: var(--dart);
+}
+
+.damage-source-card strong,
+.damage-source-empty strong {
+  font-size: 13px;
+}
+
+.damage-source-card span,
+.damage-source-card em,
+.damage-source-card small,
+.damage-source-empty span {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .detail-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -811,6 +963,7 @@ td:last-child {
   .split,
   .match-workspace,
   .map-control-layout,
+  .damage-source-tool,
   .simulation-grid,
   .style-cluster-card,
   .reason-grid,

@@ -10,14 +10,18 @@ const state = {
   tournamentSimulation: [],
   teamGameMetrics: [],
   openingPositions: [],
+  damageSources: [],
   selectedMapSchool: "",
   selectedTeam: "",
   selectedMatch: "",
   matchImageKind: "heat",
+  selectedDamagePoint: null,
 };
 
 const fmt = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 const SHARK_SCHOOL = "哈尔滨工业大学（深圳）";
+const FIELD_WIDTH = 28;
+const FIELD_HEIGHT = 15;
 
 function parseCsv(text) {
   const rows = [];
@@ -350,6 +354,7 @@ function renderTeamDetail(row) {
 }
 
 function renderMatches() {
+  const previousSelectedMatch = state.selectedMatch;
   const search = document.querySelector("#matchSearch").value.trim().toLowerCase();
   const side = document.querySelector("#matchSide").value;
   const rows = state.matches.filter((row) => {
@@ -366,6 +371,9 @@ function renderMatches() {
   if (!rows.some((row) => row["序号"] === state.selectedMatch)) {
     state.selectedMatch = rows[0]?.["序号"] || "";
   }
+  if (state.selectedMatch !== previousSelectedMatch) {
+    state.selectedDamagePoint = null;
+  }
 
   document.querySelector("#matchList").innerHTML = rows
     .map(
@@ -379,6 +387,9 @@ function renderMatches() {
     .join("");
   document.querySelectorAll(".match-list-item").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.selectedMatch !== button.dataset.match) {
+        state.selectedDamagePoint = null;
+      }
       state.selectedMatch = button.dataset.match;
       renderMatches();
     });
@@ -393,6 +404,7 @@ function renderMatchDetail(row) {
     document.querySelector("#matchMeta").textContent = "";
     document.querySelector("#matchStats").innerHTML = "";
     image.removeAttribute("src");
+    renderDamageSourceMap(null);
     return;
   }
   document.querySelector("#matchTitle").textContent = `${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}`;
@@ -406,6 +418,175 @@ function renderMatchDetail(row) {
   const file = state.matchImageKind === "heat" ? row["热力图"] : row["轨迹图"];
   image.src = `./assets/h2h_all/${file}`;
   image.alt = `${row["红方学校"]} 对 ${row["蓝方学校"]}${state.matchImageKind === "heat" ? "热力图" : "轨迹图"}`;
+  renderDamageSourceMap(row);
+}
+
+function fieldLeft(x) {
+  return Math.max(0, Math.min(100, (numberOf(x) / FIELD_WIDTH) * 100));
+}
+
+function fieldTop(y) {
+  return Math.max(0, Math.min(100, (1 - numberOf(y) / FIELD_HEIGHT) * 100));
+}
+
+function damageSourceRowsForMatch(row) {
+  if (!row) return [];
+  return state.damageSources.filter((item) => item["match_id"] === row["序号"]);
+}
+
+function damageSourceCandidates(row) {
+  const point = state.selectedDamagePoint;
+  const rows = damageSourceRowsForMatch(row);
+  if (!point || !rows.length) return [];
+  const withDistance = rows
+    .map((item) => {
+      const dx = numberOf(item["hit_x"]) - point.x;
+      const dy = numberOf(item["hit_y"]) - point.y;
+      return { ...item, clickDistance: Math.hypot(dx, dy) };
+    })
+    .sort((a, b) => a.clickDistance - b.clickDistance || numberOf(b["hit_count"]) - numberOf(a["hit_count"]));
+  const close = withDistance.filter((item) => item.clickDistance <= 2.2);
+  return mergeDamageSourceCandidates(close.length ? close : withDistance.slice(0, 12))
+    .sort((a, b) => numberOf(b["hit_count"]) - numberOf(a["hit_count"]))
+    .slice(0, 18);
+}
+
+function mergeDamageSourceCandidates(rows) {
+  const groups = new Map();
+  rows.forEach((item) => {
+    const sourceCellX = Math.round(numberOf(item["source_x"]) / 1.8);
+    const sourceCellY = Math.round(numberOf(item["source_y"]) / 1.8);
+    const key = `${item["source_robot_id"]}:${sourceCellX}:${sourceCellY}`;
+    const hits = numberOf(item["hit_count"]);
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { ...item, damageTypes: new Set([item["damage_type"]]) });
+      return;
+    }
+    const oldHits = numberOf(existing["hit_count"]);
+    const totalHits = oldHits + hits;
+    const weighted = (field) => {
+      const value = (numberOf(existing[field]) * oldHits + numberOf(item[field]) * hits) / Math.max(totalHits, 1);
+      existing[field] = value.toFixed(field.includes("_distance") ? 2 : 3);
+    };
+    weighted("hit_x");
+    weighted("hit_y");
+    weighted("source_x");
+    weighted("source_y");
+    weighted("avg_distance");
+    existing["hit_count"] = String(totalHits);
+    existing["damage_sum"] = (numberOf(existing["damage_sum"]) + numberOf(item["damage_sum"])).toFixed(1);
+    existing.damageTypes.add(item["damage_type"]);
+    existing["damage_type"] = [...existing.damageTypes].filter(Boolean).join("/");
+    existing.clickDistance = Math.min(existing.clickDistance, item.clickDistance);
+  });
+  return [...groups.values()].map((item) => {
+    delete item.damageTypes;
+    return item;
+  });
+}
+
+function damageSourceMarker(item, index) {
+  const sideClass = item["source_side"] === "红" ? "red" : "blue";
+  const hits = numberOf(item["hit_count"]);
+  const size = Math.max(24, Math.min(44, 22 + Math.sqrt(hits) * 2.4));
+  const label = `${item["source_side"]}${item["source_robot_no"]}`;
+  return `
+    <button
+      class="damage-source-marker ${sideClass}"
+      style="left:${fieldLeft(item["source_x"])}%;top:${fieldTop(item["source_y"])}%;width:${size}px;height:${size}px"
+      title="${item["source_school"]} ${item["source_side"]}${item["source_robot_no"]}号 ${item["source_robot_type"]} · ${hits} 次"
+      data-source-index="${index}"
+    >
+      <strong>${label}</strong>
+      <span>${item["source_robot_type"]}</span>
+    </button>
+  `;
+}
+
+function damageSourceListItem(item) {
+  const sideClass = item["source_side"] === "红" ? "red" : "blue";
+  return `
+    <div class="damage-source-card ${sideClass}">
+      <strong>${item["source_side"]}${item["source_robot_no"]}号 ${item["source_robot_type"]}</strong>
+      <span>${item["source_school"]}</span>
+      <em>${item["damage_type"]} · ${fmt.format(numberOf(item["hit_count"]))} 次 · 伤害 ${fmt.format(numberOf(item["damage_sum"]))}</em>
+      <small>主要命中 ${item["target_side"]}${item["target_robot_no"]}号 ${item["target_robot_type"]} · 均距 ${fmt.format(numberOf(item["avg_distance"]))}m</small>
+    </div>
+  `;
+}
+
+function renderDamageSourceMap(row) {
+  const map = document.querySelector("#damageSourceMap");
+  const overlay = document.querySelector("#damageSourceOverlay");
+  const meta = document.querySelector("#damageSourceMeta");
+  const list = document.querySelector("#damageSourceList");
+  if (!map || !overlay || !meta || !list) return;
+
+  const rows = damageSourceRowsForMatch(row);
+  map.onclick = (event) => {
+    if (!row) return;
+    const rect = map.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * FIELD_WIDTH;
+    const y = (1 - (event.clientY - rect.top) / rect.height) * FIELD_HEIGHT;
+    state.selectedDamagePoint = {
+      x: Math.max(0, Math.min(FIELD_WIDTH, x)),
+      y: Math.max(0, Math.min(FIELD_HEIGHT, y)),
+    };
+    renderDamageSourceMap(row);
+  };
+
+  if (!row) {
+    overlay.innerHTML = "";
+    meta.textContent = "未选择对局";
+    list.innerHTML = "";
+    return;
+  }
+  if (!rows.length) {
+    overlay.innerHTML = "";
+    meta.textContent = "该对局暂无可匹配来源数据";
+    list.innerHTML = "";
+    return;
+  }
+  if (!state.selectedDamagePoint) {
+    overlay.innerHTML = "";
+    meta.textContent = `${rows.length} 个来源聚合点`;
+    list.innerHTML = `
+      <div class="damage-source-empty">
+        <strong>选择一个地图位置</strong>
+        <span>将显示附近受击事件对应的发弹来源。</span>
+      </div>
+    `;
+    return;
+  }
+
+  const point = state.selectedDamagePoint;
+  const candidates = damageSourceCandidates(row);
+  const lines = candidates
+    .slice(0, 12)
+    .map(
+      (item) => `
+        <line
+          x1="${fieldLeft(point.x)}" y1="${fieldTop(point.y)}"
+          x2="${fieldLeft(item["source_x"])}" y2="${fieldTop(item["source_y"])}"
+        />
+      `
+    )
+    .join("");
+  overlay.innerHTML = `
+    <svg class="damage-source-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>
+    <div class="damage-click-point" style="left:${fieldLeft(point.x)}%;top:${fieldTop(point.y)}%"></div>
+    ${candidates.map(damageSourceMarker).join("")}
+  `;
+  meta.textContent = `坐标 ${fmt.format(point.x)}, ${fmt.format(point.y)} · 来源 ${candidates.length} 组`;
+  list.innerHTML = candidates.length
+    ? candidates.map(damageSourceListItem).join("")
+    : `
+      <div class="damage-source-empty">
+        <strong>附近暂无匹配来源</strong>
+        <span>可换一个交火更密集的位置查看。</span>
+      </div>
+    `;
 }
 
 function renderOpeningTable() {
@@ -974,6 +1155,7 @@ async function init() {
     state.tournamentSimulation = window.RMUC_DATA.tournamentSimulation || [];
     state.teamGameMetrics = window.RMUC_DATA.teamGameMetrics || [];
     state.openingPositions = window.RMUC_DATA.openingPositions || [];
+    state.damageSources = window.RMUC_DATA.damageSources || [];
   } else {
     const [
       teams,
@@ -987,6 +1169,7 @@ async function init() {
       tournamentSimulation,
       teamGameMetrics,
       openingPositions,
+      damageSources,
     ] = await Promise.all([
       loadCsv("./data/all_qualified_team_tactical_profile_metrics.csv"),
       loadCsv("./data/all_handbook_h2h_matches_visuals.csv"),
@@ -999,6 +1182,7 @@ async function init() {
       loadCsv("./data/simulation_tournament_probabilities.csv"),
       loadCsv("./data/analysis_team_game_metrics.csv"),
       loadCsv("./data/opening_positions_0_30s_by_role.csv"),
+      loadCsv("./data/analysis_damage_source_points.csv"),
     ]);
     state.teams = teams;
     state.matches = matches;
@@ -1011,6 +1195,7 @@ async function init() {
     state.tournamentSimulation = tournamentSimulation;
     state.teamGameMetrics = teamGameMetrics;
     state.openingPositions = openingPositions;
+    state.damageSources = damageSources;
   }
   renderMetrics();
   renderIntensityChart();
