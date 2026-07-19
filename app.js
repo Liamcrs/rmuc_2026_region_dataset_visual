@@ -19,6 +19,7 @@ const state = {
   replayModel: null,
   replayTime: 0,
   replayTimer: null,
+  replayAnimationFrame: null,
   replaySpeed: 1,
   replayTrail: 20,
   replayVisibleEntities: new Set(),
@@ -498,6 +499,53 @@ function nearestReplayFrame(model, time) {
   return model.frames.reduce((best, frame) => (Math.abs(frame.t - time) < Math.abs(best.t - time) ? frame : best), model.frames[0]);
 }
 
+function replayFrameBounds(model, time) {
+  if (!model?.frames?.length) return { before: null, after: null, ratio: 0 };
+  const clamped = Math.max(model.frames[0].t, Math.min(model.duration, numberOf(time)));
+  let before = model.frames[0];
+  let after = model.frames[model.frames.length - 1];
+  for (let i = 0; i < model.frames.length; i += 1) {
+    if (model.frames[i].t <= clamped) before = model.frames[i];
+    if (model.frames[i].t >= clamped) {
+      after = model.frames[i];
+      break;
+    }
+  }
+  const span = Math.max(0.001, after.t - before.t);
+  return { before, after, ratio: Math.max(0, Math.min(1, (clamped - before.t) / span)) };
+}
+
+function lerp(a, b, ratio) {
+  return numberOf(a) + (numberOf(b) - numberOf(a)) * ratio;
+}
+
+function interpolatedReplayState(model, time) {
+  const { before, after, ratio } = replayFrameBounds(model, time);
+  if (!before || !after) return { frame: null, byEntity: {} };
+  const afterByKey = Object.fromEntries(after.states.map((item) => [item.key, item]));
+  const states = before.states.map((item) => {
+    const next = afterByKey[item.key] || item;
+    return {
+      ...item,
+      x: lerp(item.x, next.x, ratio),
+      y: lerp(item.y, next.y, ratio),
+      hp: lerp(item.hp, next.hp, ratio),
+      maxHp: lerp(item.maxHp, next.maxHp, ratio),
+      heat: lerp(item.heat, next.heat, ratio),
+      heatLimit: lerp(item.heatLimit, next.heatLimit, ratio),
+      shots17: ratio < 0.5 ? item.shots17 : next.shots17,
+      shots42: ratio < 0.5 ? item.shots42 : next.shots42,
+      shotDelta: ratio < 0.5 ? item.shotDelta : next.shotDelta,
+      vulnerable: ratio < 0.5 ? item.vulnerable : next.vulnerable,
+      heading: lerp(item.heading, next.heading, ratio),
+    };
+  });
+  return {
+    frame: { t: numberOf(time), states },
+    byEntity: Object.fromEntries(states.map((item) => [item.key, item])),
+  };
+}
+
 function nextReplayTime(model, currentTime, speed) {
   if (!model?.frames?.length) return 0;
   const times = model.frames.map((frame) => frame.t);
@@ -511,11 +559,7 @@ function nextReplayTime(model, currentTime, speed) {
 }
 
 function stateAt(model, time) {
-  const frame = nearestReplayFrame(model, time);
-  return {
-    frame,
-    byEntity: Object.fromEntries((frame?.states || []).map((item) => [item.key, item])),
-  };
+  return interpolatedReplayState(model, time);
 }
 
 function stopReplayPlayback() {
@@ -523,8 +567,31 @@ function stopReplayPlayback() {
     clearInterval(state.replayTimer);
     state.replayTimer = null;
   }
+  if (state.replayAnimationFrame) {
+    window.cancelAnimationFrame(state.replayAnimationFrame);
+    state.replayAnimationFrame = null;
+  }
   const play = document.querySelector("#battleReplayPlay");
   if (play) play.textContent = "播放";
+}
+
+function startSmoothReplayPlayback() {
+  if (!state.replayModel) return;
+  stopReplayPlayback();
+  const play = document.querySelector("#battleReplayPlay");
+  if (play) play.textContent = "暂停";
+  let previous = performance.now();
+  const tick = (now) => {
+    const elapsed = Math.max(0, (now - previous) / 1000);
+    previous = now;
+    const minTime = state.replayModel.frames[0]?.t || 0;
+    const duration = Math.max(1, state.replayModel.duration - minTime);
+    const next = state.replayTime + elapsed * Math.max(0.1, state.replaySpeed);
+    state.replayTime = next > state.replayModel.duration ? minTime + ((next - minTime) % duration) : next;
+    renderReplayFrame();
+    state.replayAnimationFrame = window.requestAnimationFrame(tick);
+  };
+  state.replayAnimationFrame = window.requestAnimationFrame(tick);
 }
 
 function replayCanvasPoint(canvas, x, y) {
@@ -651,6 +718,40 @@ function drawReplayRobot(ctx, canvas, item, recentHits) {
   ctx.restore();
 }
 
+function drawReplayObjectiveHud(ctx, canvas, item) {
+  if (!["基地", "前哨站"].includes(item.entity.type) || !state.replayVisibleEntities.has(item.key)) return;
+  const [x, y] = replayCanvasPoint(canvas, item.x, item.y);
+  const dpr = window.devicePixelRatio || 1;
+  const color = replayEntityColor(item.entity);
+  const ratio = item.maxHp ? Math.max(0, Math.min(1, item.hp / item.maxHp)) : 0;
+  const width = (item.entity.type === "基地" ? 76 : 62) * dpr;
+  const height = 8 * dpr;
+  const top = y - (item.entity.type === "基地" ? 36 : 30) * dpr;
+  const left = x - width / 2;
+  const label = `${item.entity.side}${item.entity.type} ${Math.round(item.hp)}/${Math.round(item.maxHp)}`;
+
+  ctx.save();
+  ctx.globalAlpha = 0.98;
+  ctx.fillStyle = "rgba(10, 13, 18, .88)";
+  ctx.fillRect(left - 3 * dpr, top - 17 * dpr, width + 6 * dpr, height + 22 * dpr);
+  ctx.fillStyle = "rgba(255, 255, 255, .22)";
+  ctx.fillRect(left, top, width, height);
+  ctx.fillStyle = color;
+  ctx.fillRect(left, top, width * ratio, height);
+  ctx.strokeStyle = "rgba(255, 255, 255, .9)";
+  ctx.lineWidth = 1 * dpr;
+  ctx.strokeRect(left, top, width, height);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.font = `700 ${10 * dpr}px system-ui, sans-serif`;
+  ctx.lineWidth = 3 * dpr;
+  ctx.strokeStyle = "rgba(0, 0, 0, .92)";
+  ctx.strokeText(label, x, top - 3 * dpr);
+  ctx.fillStyle = "#fff";
+  ctx.fillText(label, x, top - 3 * dpr);
+  ctx.restore();
+}
+
 function drawReplayCanvas(model, time) {
   const canvas = document.querySelector("#battleReplayCanvas");
   if (!canvas) return;
@@ -759,6 +860,7 @@ function drawReplayCanvas(model, time) {
     });
 
   (frameState.frame?.states || []).forEach((item) => drawReplayRobot(ctx, canvas, item, hitEvents));
+  (frameState.frame?.states || []).forEach((item) => drawReplayObjectiveHud(ctx, canvas, item));
 }
 
 function replayRows() {
@@ -947,19 +1049,18 @@ function renderReplayFrame() {
   const time = document.querySelector("#battleReplayTime");
   const detail = document.querySelector("#battleReplayDetail");
   if (!model || !slider || !time || !detail) return;
-  const frame = nearestReplayFrame(model, state.replayTime);
-  if (!frame) return;
-  state.replayTime = frame.t;
+  const frameState = stateAt(model, state.replayTime);
+  if (!frameState.frame) return;
   slider.max = model.duration;
-  slider.value = frame.t;
-  time.textContent = `${frame.t}s / 倒计时 ${Math.max(0, Math.ceil(420 - frame.t)).toString().padStart(3, "0")}s`;
-  drawReplayCanvas(model, frame.t);
+  slider.value = state.replayTime;
+  time.textContent = `${state.replayTime.toFixed(1)}s / 倒计时 ${Math.max(0, Math.ceil(420 - state.replayTime)).toString().padStart(3, "0")}s`;
+  drawReplayCanvas(model, state.replayTime);
   renderReplayRosters();
-  const details = recentReplayEvents(model, frame.t, 2.5)
+  const details = recentReplayEvents(model, state.replayTime, 2.5)
     .sort((a, b) => (a.type === "受击" ? -1 : 0) - (b.type === "受击" ? -1 : 0))
     .slice(0, 8)
     .map(replayEventText);
-  detail.textContent = details.length ? details.join("；") : `${model.meta.title || "代表局"} · ${frame.t}s 无已选事件`;
+  detail.textContent = details.length ? details.join("；") : `${model.meta.title || "代表局"} · ${state.replayTime.toFixed(1)}s 无已选事件`;
 }
 
 function fieldLeft(x) {
@@ -1633,8 +1734,10 @@ function bindInteractions() {
     state.replayTime = numberOf(event.target.value);
     renderReplayFrame();
   });
-  document.querySelector("#battleReplaySpeed").addEventListener("input", (event) => {
-    state.replaySpeed = numberOf(event.target.value) || 1;
+  ["input", "change"].forEach((eventName) => {
+    document.querySelector("#battleReplaySpeed").addEventListener(eventName, (event) => {
+      state.replaySpeed = numberOf(event.target.value) || 1;
+    });
   });
   document.querySelector("#battleReplayTrail").addEventListener("input", (event) => {
     state.replayTrail = Math.max(4, Math.min(90, numberOf(event.target.value) || 20));
@@ -1646,15 +1749,11 @@ function bindInteractions() {
   });
   document.querySelector("#battleReplayPlay").addEventListener("click", () => {
     if (!state.replayModel) return;
-    if (state.replayTimer) {
+    if (state.replayTimer || state.replayAnimationFrame) {
       stopReplayPlayback();
       return;
     }
-    document.querySelector("#battleReplayPlay").textContent = "暂停";
-    state.replayTimer = setInterval(() => {
-      state.replayTime = nextReplayTime(state.replayModel, state.replayTime, state.replaySpeed);
-      renderReplayFrame();
-    }, 250);
+    startSmoothReplayPlayback();
   });
   document.querySelector("#openReplayFromMatch").addEventListener("click", () => {
     stopReplayPlayback();

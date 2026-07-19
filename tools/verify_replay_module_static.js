@@ -31,6 +31,9 @@ const requiredApp = [
   "function loadReplayMatch(",
   "function renderReplayFrame(",
   "function drawReplayCanvas(",
+  "function interpolatedReplayState(",
+  "function drawReplayObjectiveHud(",
+  "function startSmoothReplayPlayback(",
   "function stopReplayPlayback(",
   "function nextReplayTime(",
 ];
