@@ -785,12 +785,22 @@ td:last-child {
 .replay-match-item {
   display: grid;
   gap: 4px;
-  width: 100%;
   padding: 10px 11px;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: #fff;
   color: var(--ink);
+  text-align: left;
+}
+
+.replay-match-main {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
   text-align: left;
 }
 
@@ -808,6 +818,31 @@ td:last-child {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.replay-round-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.replay-round-list button {
+  min-width: 52px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.replay-round-list button:hover,
+.replay-round-list button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
 }
 
 .replay-workspace {
@@ -925,6 +960,83 @@ td:last-child {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.replay-event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.replay-event-column {
+  min-width: 0;
+}
+
+.replay-event-column h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.replay-event-column ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replay-event-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 3px 7px;
+  align-items: baseline;
+  min-width: 0;
+  padding: 6px 7px;
+  border-left: 3px solid #8aa0bd;
+  border-radius: 5px;
+  background: #f7f9fc;
+}
+
+.replay-event-card.red {
+  border-left-color: #ff5268;
+}
+
+.replay-event-card.blue {
+  border-left-color: #3f8cff;
+}
+
+.replay-event-time {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.replay-event-main {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-event-sub {
+  grid-column: 2 / 4;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-event-value {
+  color: #b45309;
+  font-weight: 900;
+}
+
+.replay-event-empty {
+  color: var(--muted);
 }
 
 .replay-roster {

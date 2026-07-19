@@ -9,12 +9,14 @@ const state = {
   tournamentSimulation: [],
   teamGameMetrics: [],
   damageSources: [],
+  replayGames: [],
   selectedMapSchool: "",
   selectedTeam: "",
   selectedMatch: "",
   matchImageKind: "heat",
   selectedDamagePoint: null,
   selectedReplayMatch: "",
+  selectedReplayGame: "",
   replayCache: {},
   replayModel: null,
   replayTime: 0,
@@ -440,6 +442,7 @@ function renderMatchDetail(row) {
 }
 
 function replayFile(row) {
+  if (row?.file) return `./${row.file}`;
   return `./data/battlescope_replays/match_${String(numberOf(row?.["序号"])).padStart(3, "0")}.json`;
 }
 
@@ -607,12 +610,77 @@ function replayEntitySort(a, b) {
   return order.indexOf(a.type) - order.indexOf(b.type) || numberOf(a.no) - numberOf(b.no);
 }
 
-function replayEventText(event) {
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function replayEventGroup(type) {
+  if (type === "受击") return "受击伤害";
+  if (type === "发弹") return "发弹";
+  if (["装配成功", "增益"].includes(type)) return "经济与增益";
+  if (["飞镖闸门开", "飞镖命中", "能量机关"].includes(type)) return "飞镖与机关";
+  return "其他";
+}
+
+function replayEventSubject(event) {
   const side = event.side ? `${event.side}方` : "";
   const unit = event.no ? `${event.no}号${event.robot_type || ""}` : event.robot_type || "";
-  const value = event.value ? ` ${fmt.format(Math.abs(numberOf(event.value)))}` : "";
+  const school = event.school ? ` ${event.school}` : "";
+  return `${side}${unit || event.type}${school}`.trim();
+}
+
+function replayEventText(event) {
+  const subject = replayEventSubject(event);
+  const target = event.target_no || event.target_type ? ` -> ${event.target_no ? `${event.target_no}号` : ""}${event.target_type || ""}` : "";
   const count = numberOf(event.count) > 1 ? ` x${event.count}` : "";
-  return `${event.t}s ${side}${unit} ${event.type}${event.category ? `·${event.category}` : ""}${value}${count}`;
+  const value = event.value ? ` · ${event.type === "受击" ? "伤害" : "数值"} ${fmt.format(Math.abs(numberOf(event.value)))}` : "";
+  const category = event.category ? ` · ${event.category}` : "";
+  return `${numberOf(event.t).toFixed(1)}s ${subject}${target} · ${event.type}${category}${value}${count}`;
+}
+
+function replayEventCard(event) {
+  const value = event.value ? `<strong>${fmt.format(Math.abs(numberOf(event.value)))}</strong>` : "";
+  return `
+    <li class="replay-event-card ${event.side === "红" ? "red" : event.side === "蓝" ? "blue" : ""}">
+      <span class="replay-event-time">${numberOf(event.t).toFixed(1)}s</span>
+      <span class="replay-event-main">${escapeHtml(replayEventSubject(event))}</span>
+      <span class="replay-event-sub">${escapeHtml([
+        event.target_no || event.target_type ? `目标 ${event.target_no ? `${event.target_no}号` : ""}${event.target_type || ""}` : "",
+        event.category || "",
+        numberOf(event.count) > 1 ? `${event.count}次` : "",
+      ].filter(Boolean).join(" · "))}</span>
+      ${value ? `<span class="replay-event-value">${event.type === "受击" ? "-" : ""}${value}</span>` : ""}
+    </li>
+  `;
+}
+
+function renderReplayEventPanel(model, events, time) {
+  if (!events.length) {
+    return `<div class="replay-event-empty">${escapeHtml(model.meta.title || "单局回放")} · ${time.toFixed(1)}s 暂无已选事件</div>`;
+  }
+  const groups = ["受击伤害", "发弹", "经济与增益", "飞镖与机关", "其他"];
+  const byGroup = Object.fromEntries(groups.map((group) => [group, []]));
+  events.forEach((event) => byGroup[replayEventGroup(event.type)].push(event));
+  return `
+    <div class="replay-event-grid">
+      ${groups
+        .filter((group) => byGroup[group].length)
+        .map(
+          (group) => `
+            <section class="replay-event-column">
+              <h3>${group}</h3>
+              <ul>${byGroup[group].slice(0, 6).map(replayEventCard).join("")}</ul>
+            </section>
+          `
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function recentReplayEvents(model, time, windowSeconds = 1.5) {
@@ -878,6 +946,22 @@ function replayRows() {
   });
 }
 
+function replayGamesForMatch(row) {
+  if (!row) return [];
+  return state.replayGames
+    .filter((game) => String(game["match_seq"]) === String(row["序号"]))
+    .sort((a, b) => numberOf(a["round_no"]) - numberOf(b["round_no"]));
+}
+
+function selectedGameForMatch(row) {
+  const games = replayGamesForMatch(row);
+  if (!games.length) return null;
+  const selected = games.find((game) => String(game["replay_id"]) === String(state.selectedReplayGame));
+  if (selected) return selected;
+  const representative = games.find((game) => String(game["round_no"]) === String(row["代表局号"]));
+  return representative || games[0];
+}
+
 function renderReplayMatches() {
   const list = document.querySelector("#battleReplayList");
   if (!list) return;
@@ -885,40 +969,67 @@ function renderReplayMatches() {
   if (!rows.some((row) => row["序号"] === state.selectedReplayMatch)) {
     state.selectedReplayMatch = rows[0]?.["序号"] || "";
   }
+  const selectedRow = rows.find((row) => row["序号"] === state.selectedReplayMatch);
+  const selectedGame = selectedGameForMatch(selectedRow);
+  state.selectedReplayGame = selectedGame?.["replay_id"] || "";
   list.innerHTML = rows.length
     ? rows
         .map(
-          (row) => `
-            <button class="replay-match-item ${row["序号"] === state.selectedReplayMatch ? "is-active" : ""}" data-match="${row["序号"]}">
-              <span class="replay-match-title">${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}</span>
-              <span class="replay-match-meta">${row["赛区"]} 第${row["场次号"]}场 · 代表局第${row["代表局号"]}局 · 胜方 ${row["胜方学校"]}</span>
-            </button>
-          `
+          (row) => {
+            const games = replayGamesForMatch(row);
+            return `
+              <article class="replay-match-item ${row["序号"] === state.selectedReplayMatch ? "is-active" : ""}" data-match="${row["序号"]}">
+                <button class="replay-match-main" type="button" data-match="${row["序号"]}">
+                  <span class="replay-match-title">${row["红方学校"]} ${row["红胜局"]}:${row["蓝胜局"]} ${row["蓝方学校"]}</span>
+                  <span class="replay-match-meta">${row["赛区"]} 第${row["场次号"]}场 · 共${row["局数"]}局 · 场胜方 ${row["胜方学校"]}</span>
+                </button>
+                <div class="replay-round-list" aria-label="选择局号">
+                  ${games
+                    .map(
+                      (game) => `
+                        <button type="button" class="${String(game["replay_id"]) === String(state.selectedReplayGame) ? "is-active" : ""}" data-match="${row["序号"]}" data-game="${game["replay_id"]}">
+                          第${game["round_no"]}局
+                        </button>
+                      `
+                    )
+                    .join("")}
+                </div>
+              </article>
+            `;
+          }
         )
         .join("")
     : '<div class="empty">没有匹配的回放</div>';
-  list.querySelectorAll(".replay-match-item").forEach((button) => {
+  list.querySelectorAll(".replay-match-main").forEach((button) => {
     button.addEventListener("click", () => {
       stopReplayPlayback();
       state.selectedReplayMatch = button.dataset.match;
+      state.selectedReplayGame = "";
       renderReplayMatches();
-      loadReplayMatch(rows.find((row) => row["序号"] === state.selectedReplayMatch));
     });
   });
-  loadReplayMatch(rows.find((row) => row["序号"] === state.selectedReplayMatch));
+  list.querySelectorAll(".replay-round-list button").forEach((button) => {
+    button.addEventListener("click", () => {
+      stopReplayPlayback();
+      state.selectedReplayMatch = button.dataset.match;
+      state.selectedReplayGame = button.dataset.game;
+      renderReplayMatches();
+    });
+  });
+  loadReplayMatch(selectedRow, selectedGame);
 }
 
-async function loadReplayMatch(row) {
+async function loadReplayMatch(row, gameRow = selectedGameForMatch(row)) {
   const detail = document.querySelector("#battleReplayDetail");
   if (!detail) return;
-  if (!row) {
+  if (!row || !gameRow) {
     state.replayModel = null;
     detail.textContent = "没有匹配的回放";
     renderReplayRosters();
     drawReplayCanvas(null, 0);
     return;
   }
-  const matchId = row["序号"];
+  const matchId = gameRow["replay_id"];
   if (state.replayCache[matchId]) {
     const model = state.replayCache[matchId];
     if (state.replayModel !== model) state.replayTime = model.frames[0]?.t || 0;
@@ -929,7 +1040,7 @@ async function loadReplayMatch(row) {
   }
   detail.textContent = "正在读取回放数据";
   try {
-    const response = await fetch(replayFile(row));
+    const response = await fetch(replayFile(gameRow));
     if (!response.ok) throw new Error("该场暂无回放数据");
     const model = buildReplayModel(await response.json());
     state.replayCache[matchId] = model;
@@ -1057,10 +1168,9 @@ function renderReplayFrame() {
   drawReplayCanvas(model, state.replayTime);
   renderReplayRosters();
   const details = recentReplayEvents(model, state.replayTime, 2.5)
-    .sort((a, b) => (a.type === "受击" ? -1 : 0) - (b.type === "受击" ? -1 : 0))
-    .slice(0, 8)
-    .map(replayEventText);
-  detail.textContent = details.length ? details.join("；") : `${model.meta.title || "代表局"} · ${state.replayTime.toFixed(1)}s 无已选事件`;
+    .sort((a, b) => (a.type === "受击" ? 0 : 1) - (b.type === "受击" ? 0 : 1) || numberOf(b.t) - numberOf(a.t))
+    .slice(0, 28);
+  detail.innerHTML = renderReplayEventPanel(model, details, state.replayTime);
 }
 
 function fieldLeft(x) {
@@ -1757,7 +1867,10 @@ function bindInteractions() {
   });
   document.querySelector("#openReplayFromMatch").addEventListener("click", () => {
     stopReplayPlayback();
+    const row = state.matches.find((item) => item["序号"] === state.selectedMatch);
+    const representative = replayGamesForMatch(row).find((game) => String(game["round_no"]) === String(row?.["代表局号"]));
     state.selectedReplayMatch = state.selectedMatch;
+    state.selectedReplayGame = representative?.["replay_id"] || "";
     setView("replay");
     renderReplayMatches();
   });
@@ -1784,6 +1897,7 @@ async function init() {
     state.tournamentSimulation = window.RMUC_DATA.tournamentSimulation || [];
     state.teamGameMetrics = window.RMUC_DATA.teamGameMetrics || [];
     state.damageSources = window.RMUC_DATA.damageSources || [];
+    state.replayGames = await loadCsv("./data/battlescope_replay_index.csv");
   } else {
     const [
       teams,
@@ -1796,6 +1910,7 @@ async function init() {
       tournamentSimulation,
       teamGameMetrics,
       damageSources,
+      replayGames,
     ] = await Promise.all([
       loadCsv("./data/all_qualified_team_tactical_profile_metrics.csv"),
       loadCsv("./data/all_handbook_h2h_matches_visuals.csv"),
@@ -1807,6 +1922,7 @@ async function init() {
       loadCsv("./data/simulation_tournament_probabilities.csv"),
       loadCsv("./data/analysis_team_game_metrics.csv"),
       loadCsv("./data/analysis_damage_source_points.csv"),
+      loadCsv("./data/battlescope_replay_index.csv"),
     ]);
     state.teams = teams;
     state.matches = matches;
@@ -1818,6 +1934,7 @@ async function init() {
     state.tournamentSimulation = tournamentSimulation;
     state.teamGameMetrics = teamGameMetrics;
     state.damageSources = damageSources;
+    state.replayGames = replayGames;
   }
   renderMetrics();
   renderIntensityChart();

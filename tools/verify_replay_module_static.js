@@ -28,14 +28,17 @@ const requiredApp = [
   "function buildReplayModel(",
   "function stateAt(",
   "function renderReplayMatches(",
+  "function replayGamesForMatch(",
   "function loadReplayMatch(",
   "function renderReplayFrame(",
+  "function renderReplayEventPanel(",
   "function drawReplayCanvas(",
   "function interpolatedReplayState(",
   "function drawReplayObjectiveHud(",
   "function startSmoothReplayPlayback(",
   "function stopReplayPlayback(",
   "function nextReplayTime(",
+  "./data/battlescope_replay_index.csv",
 ];
 
 const requiredStyles = [
@@ -44,6 +47,8 @@ const requiredStyles = [
   ".replay-stage",
   ".replay-roster",
   ".replay-unit-card",
+  ".replay-round-list",
+  ".replay-event-grid",
 ];
 
 const problems = [];
@@ -62,6 +67,10 @@ for (const needle of requiredStyles) {
 
 if (index.includes("battlescope-tool")) {
   problems.push("index.html still contains embedded battlescope-tool");
+}
+
+if (index.includes("96 场代表局") || app.includes("96 场代表局")) {
+  problems.push("stale representative replay copy remains");
 }
 
 if (problems.length) {
