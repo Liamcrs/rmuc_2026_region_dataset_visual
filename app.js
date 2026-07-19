@@ -498,6 +498,18 @@ function nearestReplayFrame(model, time) {
   return model.frames.reduce((best, frame) => (Math.abs(frame.t - time) < Math.abs(best.t - time) ? frame : best), model.frames[0]);
 }
 
+function nextReplayTime(model, currentTime, speed) {
+  if (!model?.frames?.length) return 0;
+  const times = model.frames.map((frame) => frame.t);
+  const currentIndex = Math.max(
+    0,
+    times.findIndex((time) => time >= currentTime)
+  );
+  const frameStep = Math.max(1, Math.round(numberOf(speed) || 1));
+  const nextIndex = currentIndex + frameStep;
+  return times[nextIndex] ?? times[0];
+}
+
 function stateAt(model, time) {
   const frame = nearestReplayFrame(model, time);
   return {
@@ -1640,8 +1652,7 @@ function bindInteractions() {
     }
     document.querySelector("#battleReplayPlay").textContent = "暂停";
     state.replayTimer = setInterval(() => {
-      const next = state.replayTime + state.replaySpeed;
-      state.replayTime = next > state.replayModel.duration ? 0 : next;
+      state.replayTime = nextReplayTime(state.replayModel, state.replayTime, state.replaySpeed);
       renderReplayFrame();
     }, 250);
   });

@@ -32,6 +32,7 @@ const requiredApp = [
   "function renderReplayFrame(",
   "function drawReplayCanvas(",
   "function stopReplayPlayback(",
+  "function nextReplayTime(",
 ];
 
 const requiredStyles = [

@@ -21,6 +21,14 @@ for (let i = 1; i <= 96; i += 1) {
   if (!replay.frames.some((frame) => Array.isArray(frame.s) && frame.s.length > 0)) {
     problems.push(`${file}: no populated frames`);
   }
+  for (const side of ["红", "蓝"]) {
+    for (const type of ["基地", "前哨站"]) {
+      const entity = replay.entities.find((item) => item.side === side && item.type === type);
+      if (!entity) {
+        problems.push(`${file}: missing ${side}${type}`);
+      }
+    }
+  }
 }
 
 if (problems.length) {
