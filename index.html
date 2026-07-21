@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RMUC 2026 分区赛数据可视化</title>
-    <link rel="stylesheet" href="./styles.css?v=shark-column-20260718" />
+    <link rel="stylesheet" href="./styles.css?v=buff-types-20260721" />
   </head>
   <body>
     <header class="app-header">
@@ -15,12 +15,11 @@
       <nav class="nav-tabs" aria-label="视图切换">
         <button class="tab is-active" data-view="overview">总览</button>
         <button class="tab" data-view="teams">队伍画像</button>
-        <button class="tab" data-view="prediction">比赛预测</button>
         <button class="tab" data-view="replay">战术回放</button>
-        <button class="tab" data-view="shark">南工骁鹰</button>
         <button class="tab" data-view="analysis">专题分析</button>
         <button class="tab" data-view="matches">对局地图</button>
-        <button class="tab" data-view="data">数据</button>
+        <button class="tab" data-view="prediction">比赛预测</button>
+        <button class="tab" data-view="shark">南工骁鹰</button>
       </nav>
     </header>
 
@@ -328,14 +327,16 @@
           <div class="panel-head">
             <div>
               <h2>专题分析</h2>
-              <p>围绕科技核心和地图控制展开。</p>
+              <p>围绕科技核心、地图控制和增益效果展开。</p>
             </div>
             <div class="filters">
               <select id="analysisTopic">
                 <option value="assembly">科技核心/工程</option>
                 <option value="map">地图控制区域</option>
+                <option value="buff">增益效果</option>
               </select>
-              <input id="analysisSearch" type="search" placeholder="搜索队伍、兵种或区域" />
+              <select id="buffEffectType" class="analysis-buff-filter" aria-label="增益类型" hidden></select>
+              <input id="analysisSearch" type="search" placeholder="搜索队伍、兵种、区域或增益类型" />
             </div>
           </div>
           <div id="analysisSummary" class="detail-strip"></div>
@@ -410,6 +411,7 @@
             <a href="./data/all_handbook_h2h_matches_visuals.csv">96 场比赛图集 CSV</a>
             <a href="./data/analysis_team_game_metrics.csv">逐局队伍指标 CSV</a>
             <a href="./data/analysis_map_control_top_zones.csv">地图控制最高区域 CSV</a>
+            <a href="./data/analysis_buff_type_summary.csv">增益效果类型统计 CSV</a>
             <a href="./data/analysis_damage_source_points.csv">受伤来源聚合点 CSV</a>
             <a href="./data/battlescope_replay_index.csv">BattleScope 回放索引 CSV</a>
             <a href="./data/analysis_team_style_clusters.csv">队伍风格 CSV</a>
@@ -424,6 +426,6 @@
     </main>
 
     <script src="./data.js?v=battlescope-20260719"></script>
-    <script src="./app.js?v=battlescope-20260719"></script>
+    <script src="./app.js?v=buff-types-20260721"></script>
   </body>
 </html>

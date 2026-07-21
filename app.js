@@ -9,10 +9,12 @@ const state = {
   tournamentSimulation: [],
   teamGameMetrics: [],
   damageSources: [],
+  buffTypes: [],
   replayGames: [],
   selectedMapSchool: "",
   selectedTeam: "",
   selectedMatch: "",
+  selectedBuffEffectType: "",
   matchImageKind: "heat",
   selectedDamagePoint: null,
   selectedReplayMatch: "",
@@ -79,6 +81,15 @@ async function loadCsv(path) {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`Failed to load ${path}`);
   return parseCsv(await response.text());
+}
+
+async function loadCsvWithFallback(path, fallbackRows = []) {
+  try {
+    return await loadCsv(path);
+  } catch (error) {
+    console.warn(error);
+    return fallbackRows;
+  }
 }
 
 function numberOf(value) {
@@ -1793,6 +1804,8 @@ function renderSharkColumn() {
 function renderAnalysis() {
   const topic = document.querySelector("#analysisTopic").value;
   const term = document.querySelector("#analysisSearch").value.trim().toLowerCase();
+  document.querySelector("#buffEffectType").hidden = topic !== "buff";
+  document.querySelector("#analysisChart").classList.toggle("full-list", topic === "buff");
 
   const configs = {
     assembly: {
@@ -1833,6 +1846,11 @@ function renderAnalysis() {
 
   if (topic === "map") {
     renderMapControlAnalysis(term);
+    return;
+  }
+
+  if (topic === "buff") {
+    renderBuffTypeAnalysis(term);
     return;
   }
 
@@ -1883,6 +1901,115 @@ function renderMapControlAnalysis(term) {
     ["最高活动区域", (r) => r["区域"]],
     ["占比", (r) => pct(r["占比"])],
     ["样本数", (r) => fmt.format(numberOf(r["样本数"]))],
+  ]);
+}
+
+function buffEffectKey(row) {
+  return `${row["事件类型"] || ""}|${row["增益类型"] || ""}`;
+}
+
+function buffEffectOptions() {
+  const grouped = {};
+  state.buffTypes.forEach((row) => {
+    const key = buffEffectKey(row);
+    if (!key.trim()) return;
+    grouped[key] ||= {
+      key,
+      label: `${row["事件类型"]} · ${row["增益类型"]}`,
+      total: 0,
+      typeGames: numberOf(row["类型覆盖局数"]),
+      typeMatches: numberOf(row["类型覆盖场数"]),
+      scopeGames: numberOf(row["统计范围局数"]),
+      scopeMatches: numberOf(row["统计范围场数"]),
+      schools: new Set(),
+    };
+    if (!grouped[key].schools.has(row["学校名"])) {
+      grouped[key].schools.add(row["学校名"]);
+      grouped[key].total += numberOf(row["学校触发次数"]);
+    }
+  });
+  return Object.values(grouped).sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "zh-CN"));
+}
+
+function buffSchoolRows(effectKey, term) {
+  const details = state.buffTypes.filter((row) => buffEffectKey(row) === effectKey);
+  const grouped = {};
+  details.forEach((row) => {
+    if (!grouped[row["学校名"]]) {
+      grouped[row["学校名"]] = {
+        "学校名": row["学校名"],
+        "队伍类别": row["队伍类别"],
+        "事件类型": row["事件类型"],
+        "增益类型": row["增益类型"],
+        "学校触发次数": numberOf(row["学校触发次数"]),
+        "学校覆盖局数": numberOf(row["学校覆盖局数"]),
+        "学校覆盖场数": numberOf(row["学校覆盖场数"]),
+        details: [],
+      };
+    }
+    grouped[row["学校名"]].details.push(row);
+  });
+  return Object.values(grouped)
+    .map((row) => ({
+      ...row,
+      statTarget: row["事件类型"] === "能量机关"
+        ? "全队激活"
+        : row.details
+          .sort((a, b) => numberOf(b["触发次数"]) - numberOf(a["触发次数"]) || String(a["机器人类型"]).localeCompare(String(b["机器人类型"]), "zh-CN"))
+          .map((detail) => `${detail["机器人类型"] || "全队"} ${fmt.format(numberOf(detail["触发次数"]))}`)
+          .join(" / "),
+    }))
+    .filter((row) => {
+      if (!term) return true;
+      const haystack = [
+        row["学校名"],
+        row["队伍类别"],
+        row["事件类型"],
+        row["增益类型"],
+        row.statTarget,
+      ].join(" ").toLowerCase();
+      return haystack.includes(term);
+    })
+    .sort((a, b) => numberOf(b["学校触发次数"]) - numberOf(a["学校触发次数"]) || String(a["学校名"]).localeCompare(String(b["学校名"]), "zh-CN"));
+}
+
+function renderBuffTypeAnalysis(term) {
+  const options = buffEffectOptions();
+  if (!options.some((option) => option.key === state.selectedBuffEffectType)) {
+    state.selectedBuffEffectType = options[0]?.key || "";
+  }
+  const selector = document.querySelector("#buffEffectType");
+  selector.innerHTML = options.map((option) => `<option value="${escapeHtml(option.key)}">${escapeHtml(option.label)}</option>`).join("");
+  selector.value = state.selectedBuffEffectType;
+
+  const rows = buffSchoolRows(state.selectedBuffEffectType, term);
+  const selectedOption = options.find((option) => option.key === state.selectedBuffEffectType);
+  const totalTriggers = rows.reduce((total, row) => total + numberOf(row["学校触发次数"]), 0);
+  const leading = rows[0];
+  renderDetailCards("#analysisSummary", [
+    ["增益类型", selectedOption?.label || "-"],
+    ["学校数", fmt.format(rows.length)],
+    ["次数", fmt.format(totalTriggers)],
+    ["类型覆盖", `${fmt.format(selectedOption?.typeMatches || 0)} 场 / ${fmt.format(selectedOption?.typeGames || 0)} 局`],
+    ["数据范围", `${fmt.format(selectedOption?.scopeMatches || 0)} 场 / ${fmt.format(selectedOption?.scopeGames || 0)} 局`],
+    ["首位", leading ? leading["学校名"] : "-"],
+  ]);
+  renderRankRows("#analysisChart", rows, {
+    label: (row) => row["学校名"],
+    sub: (row) => `${row["队伍类别"]} · 覆盖 ${fmt.format(numberOf(row["学校覆盖场数"]))} 场`,
+    value: (row) => row["学校触发次数"],
+    format: (value, row) => `${fmt.format(value)} 次 / ${fmt.format(numberOf(row["学校覆盖局数"]))} 局`,
+    color: (row) => (row["事件类型"] === "增益" ? "green" : ""),
+  });
+  renderDataTable("#analysisTable", rows, [
+    ["学校", (r) => r["学校名"]],
+    ["类别", (r) => r["队伍类别"]],
+    ["事件", (r) => r["事件类型"]],
+    ["增益类型", (r) => r["增益类型"]],
+    ["次数", (r) => fmt.format(numberOf(r["学校触发次数"]))],
+    ["覆盖局数", (r) => fmt.format(numberOf(r["学校覆盖局数"]))],
+    ["覆盖场数", (r) => fmt.format(numberOf(r["学校覆盖场数"]))],
+    ["统计对象", (r) => r.statTarget],
   ]);
 }
 
@@ -1964,6 +2091,10 @@ function bindInteractions() {
   ["analysisTopic", "analysisSearch"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderAnalysis);
   });
+  document.querySelector("#buffEffectType").addEventListener("input", (event) => {
+    state.selectedBuffEffectType = event.target.value;
+    renderAnalysis();
+  });
   ["matchSearch", "matchSide"].forEach((id) => {
     document.querySelector(`#${id}`).addEventListener("input", renderMatches);
   });
@@ -1982,6 +2113,7 @@ async function init() {
     state.tournamentSimulation = window.RMUC_DATA.tournamentSimulation || [];
     state.teamGameMetrics = window.RMUC_DATA.teamGameMetrics || [];
     state.damageSources = window.RMUC_DATA.damageSources || [];
+    state.buffTypes = await loadCsvWithFallback("./data/analysis_buff_type_summary.csv", window.RMUC_DATA.buffTypes || []);
     state.replayGames = await loadCsv("./data/battlescope_replay_index.csv");
   } else {
     const [
@@ -1995,6 +2127,7 @@ async function init() {
       tournamentSimulation,
       teamGameMetrics,
       damageSources,
+      buffTypes,
       replayGames,
     ] = await Promise.all([
       loadCsv("./data/all_qualified_team_tactical_profile_metrics.csv"),
@@ -2007,6 +2140,7 @@ async function init() {
       loadCsv("./data/simulation_tournament_probabilities.csv"),
       loadCsv("./data/analysis_team_game_metrics.csv"),
       loadCsv("./data/analysis_damage_source_points.csv"),
+      loadCsv("./data/analysis_buff_type_summary.csv"),
       loadCsv("./data/battlescope_replay_index.csv"),
     ]);
     state.teams = teams;
@@ -2019,6 +2153,7 @@ async function init() {
     state.tournamentSimulation = tournamentSimulation;
     state.teamGameMetrics = teamGameMetrics;
     state.damageSources = damageSources;
+    state.buffTypes = buffTypes;
     state.replayGames = replayGames;
   }
   renderMetrics();

@@ -367,6 +367,32 @@ button {
   margin-bottom: 12px;
 }
 
+.analysis-chart.full-list {
+  max-height: 680px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.analysis-chart.full-list .rank-row {
+  grid-template-columns: minmax(210px, 360px) minmax(0, 1fr) 112px;
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.analysis-chart.full-list .rank-label strong {
+  font-size: 12px;
+}
+
+.analysis-chart.full-list .rank-label span,
+.analysis-chart.full-list .rank-value {
+  font-size: 12px;
+}
+
+.analysis-buff-filter {
+  min-width: 220px;
+  max-width: 320px;
+}
+
 .rank-row {
   display: grid;
   grid-template-columns: minmax(190px, 320px) minmax(0, 1fr) 90px;
